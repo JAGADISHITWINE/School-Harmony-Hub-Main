@@ -59,6 +59,7 @@ function normalizeAuthUser(payload: any): AuthUser {
     name,
     email,
     institution_id: asString(source?.institution_id),
+    organization_id: asString(source?.organization_id),
     role,
     status,
     createdAt,

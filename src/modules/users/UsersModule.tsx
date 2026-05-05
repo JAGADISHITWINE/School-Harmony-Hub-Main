@@ -1,24 +1,75 @@
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import { Input } from "@/components/ui/input";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { createCrudModule } from "@/modules/createCrudModule";
 import { Field, FieldGrid } from "@/components/common/FormFields";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { zResolver } from "@/modules/zodResolver";
-import type { User, Role } from "@/types";
+import { api } from "@/services";
+import { useAuth } from "@/store/auth";
+import type { User } from "@/types";
+import { Eye, EyeOff } from "lucide-react";
 
-const ROLES: Role[] = ["super_admin","admin","teacher","accountant","student"];
+/* =========================
+   SESSION HELPER
+========================= */
+const getOrgIdFromSession = () => {
+  try {
+    const raw = sessionStorage.getItem("sms_auth");
+    if (!raw) return null;
 
+    const parsed = JSON.parse(raw);
+    return parsed?.state?.user?.organization_id || null;
+  } catch (e) {
+    console.error("Session parse error", e);
+    return null;
+  }
+};
+
+/* =========================
+   USERNAME GENERATOR
+========================= */
+const generateUsername = (fullName: string) => {
+  if (!fullName) return "";
+  const firstName = fullName.trim().split(" ")[0].toLowerCase();
+  const clean = firstName.replace(/[^a-z]/g, "");
+  return clean || "user";
+};
+
+/* =========================
+   SCHEMA
+========================= */
 const schema = z.object({
-  name: z.string().trim().min(2, "Required").max(80),
+  full_name: z.string().trim().min(2, "Required").max(80),
   email: z.string().trim().email("Invalid email").max(120),
-  role: z.enum(ROLES),
-  status: z.enum(["active","inactive"]),
+  phone: z.string().regex(/^\d{10}$/, "Phone must be exactly 10 digits"),
+
+  // ✅ ADDED
+  username: z.string().min(1, "Username required"),
+
+  password: z
+    .string()
+    .min(8, "Min 8 characters")
+    .optional()
+    .or(z.literal("")),
+
+  role_id: z.string().min(1, "Role required"),
+  institution_id: z.string().min(1, "Institution required"),
+  status: z.enum(["active", "inactive"]),
 });
+
 type V = z.infer<typeof schema>;
 
+/* =========================
+   MODULE
+========================= */
 export const UsersModule = createCrudModule<User, V>({
   base: "/users",
   title: "Users",
@@ -27,34 +78,288 @@ export const UsersModule = createCrudModule<User, V>({
   searchPlaceholder: "Search by name, email or role…",
   selectable: true,
   permissions: { view: "users.view", manage: "users.manage" },
+
   resolver: zResolver(schema),
-  defaultValues: { name: "", email: "", role: "teacher", status: "active" },
-  toFormValues: (u) => ({ name: u.name, email: u.email, role: u.role, status: u.status }),
+
+  defaultValues: {
+    full_name: "",
+    phone: "",
+    email: "",
+    username: "", // ✅ ADDED
+    password: "",
+    role_id: "",
+    institution_id: "",
+    status: "active",
+  },
+
+  toFormValues: (u) => ({
+    full_name: u.full_name,
+    phone: u.phone,
+    email: u.email,
+    username: (u as any).username || "", // ✅ ADDED
+    password: "",
+    role_id: (u as any).role_id || "",
+    institution_id: (u as any).institution_id || "",
+    status: u.status,
+  }),
+
+  transform: (values) => ({
+    ...values,
+    password: values.password || undefined,
+    organization_id: values.organization_id,
+  }),
+
+  /* =========================
+     TABLE
+  ========================= */
   columns: [
-    { key: "name", header: "Name", sortable: true, cell: (r) => <span className="font-medium">{r.name}</span> },
-    { key: "email", header: "Email", sortable: true, cell: (r) => <span className="text-muted-foreground">{r.email}</span> },
-    { key: "role", header: "Role", sortable: true, cell: (r) => <span className="capitalize">{String((r as any).role || "").replace("_"," ") || "-"}</span> },
-    { key: "status", header: "Status", sortable: true, cell: (r) => <StatusBadge value={r.status} /> },
-    { key: "createdAt", header: "Created", sortable: true, cell: (r) => <span className="text-muted-foreground">{r.createdAt}</span> },
+    {
+      key: "full_name",
+      header: "Name",
+      sortable: true,
+      cell: (r) => <span className="font-medium">{r.full_name}</span>,
+    },
+    {
+      key: "phone",
+      header: "Phone",
+      sortable: true,
+      cell: (r) => <span className="font-medium">{r.phone}</span>,
+    },
+    {
+      key: "email",
+      header: "Email",
+      sortable: true,
+      cell: (r) => (
+        <span className="text-muted-foreground">{r.email}</span>
+      ),
+    },
+    {
+      key: "role",
+      header: "Role",
+      sortable: true,
+      cell: (r) => (
+        <span className="capitalize">
+          {(r as any).role_name || "-"}
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortable: true,
+      cell: (r) => <StatusBadge value={r.status} />,
+    },
+    {
+      key: "createdAt",
+      header: "Created",
+      sortable: true,
+      cell: (r) => (
+        <span className="text-muted-foreground">
+          {r.createdAt}
+        </span>
+      ),
+    },
   ],
+
+  /* =========================
+     FORM
+  ========================= */
   renderForm: (form) => {
-    const { register, watch, setValue, formState: { errors } } = form;
+    const {
+      register,
+      watch,
+      setValue,
+      formState: { errors },
+    } = form;
+
+    const { user } = useAuth();
+
+    const [roles, setRoles] = useState<any[]>([]);
+    const [institutions, setInstitutions] = useState<any[]>([]);
+    const [loadingRoles, setLoadingRoles] = useState(false);
+    const [loadingInstitutions, setLoadingInstitutions] =
+      useState(false);
+
+    const [showPassword, setShowPassword] = useState(false);
+
+    /* LOAD DATA */
+    useEffect(() => {
+      const load = async () => {
+        try {
+          setLoadingRoles(true);
+          const r = await api.get("/roles");
+          setRoles(r.data?.items || r.data || []);
+        } catch {
+          setRoles([]);
+        } finally {
+          setLoadingRoles(false);
+        }
+
+        try {
+          setLoadingInstitutions(true);
+          const orgId =
+            user?.organization_id || getOrgIdFromSession();
+          if (!orgId) return;
+
+          const res = await api.get(
+            `/institutions?org_id=${orgId}`
+          );
+          setInstitutions(res.data?.items || res.data || []);
+        } catch {
+          setInstitutions([]);
+        } finally {
+          setLoadingInstitutions(false);
+        }
+      };
+
+      load();
+    }, []);
+
+    /* SET ORG */
+    useEffect(() => {
+      const orgId =
+        user?.organization_id || getOrgIdFromSession();
+
+      if (orgId) {
+        setValue("organization_id", orgId);
+      }
+    }, [user]);
+
+    /* 🔥 AUTO USERNAME */
+    useEffect(() => {
+      const name = watch("full_name");
+      if (name) {
+        setValue("username", generateUsername(name));
+      }
+    }, [watch("full_name")]);
+
     return (
       <FieldGrid>
-        <Field label="Name" error={errors.name?.message as string}><Input {...register("name")} /></Field>
-        <Field label="Email" error={errors.email?.message as string}><Input type="email" {...register("email")} /></Field>
-        <Field label="Role" error={errors.role?.message as string}>
-          <Select value={watch("role")} onValueChange={(v) => setValue("role", v as Role, { shouldValidate: true })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{ROLES.map(r => <SelectItem key={r} value={r} className="capitalize">{r.replace("_"," ")}</SelectItem>)}</SelectContent>
+        {/* NAME */}
+        <Field label="Name" error={errors.full_name?.message as string}>
+          <Input {...register("full_name")} />
+        </Field>
+
+        {/* PHONE */}
+        <Field label="Phone" error={errors.phone?.message as string}>
+          <Input
+            {...register("phone")}
+            maxLength={10}
+            inputMode="numeric"
+          />
+        </Field>
+
+        {/* EMAIL */}
+        <Field label="Email" error={errors.email?.message as string}>
+          <Input type="email" {...register("email")} />
+        </Field>
+
+        {/* 🔥 HIDDEN USERNAME */}
+        <input type="hidden" {...register("username")} />
+
+        {/* PASSWORD */}
+        <Field label="Password" error={errors.password?.message as string}>
+          <div className="relative">
+            <Input
+              type={showPassword ? "text" : "password"}
+              {...register("password")}
+              className="pr-10"
+            />
+            <button
+              type="button"
+              onClick={() =>
+                setShowPassword((prev) => !prev)
+              }
+              className="absolute right-2 top-1/2 -translate-y-1/2"
+            >
+              {showPassword ? (
+                <EyeOff size={18} />
+              ) : (
+                <Eye size={18} />
+              )}
+            </button>
+          </div>
+        </Field>
+
+        {/* ROLE */}
+        <Field label="Role" error={errors.role_id?.message as string}>
+          <Select
+            value={watch("role_id") || ""}
+            onValueChange={(v) =>
+              setValue("role_id", v, { shouldValidate: true })
+            }
+            disabled={loadingRoles}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select role" />
+            </SelectTrigger>
+            <SelectContent>
+              {roles.length === 0 ? (
+                <SelectItem value="none" disabled>
+                  No roles found
+                </SelectItem>
+              ) : (
+                roles.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.name}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
           </Select>
         </Field>
+
+        {/* INSTITUTION */}
+        <Field
+          label="Institution"
+          error={errors.institution_id?.message as string}
+        >
+          <Select
+            value={watch("institution_id") || ""}
+            onValueChange={(v) =>
+              setValue("institution_id", v, {
+                shouldValidate: true,
+              })
+            }
+            disabled={loadingInstitutions}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select institution" />
+            </SelectTrigger>
+            <SelectContent>
+              {institutions.length === 0 ? (
+                <SelectItem value="none" disabled>
+                  No institutions found
+                </SelectItem>
+              ) : (
+                institutions.map((i) => (
+                  <SelectItem key={i.id} value={i.id}>
+                    {i.name}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </Field>
+
+        {/* STATUS */}
         <Field label="Status" error={errors.status?.message as string}>
-          <Select value={watch("status")} onValueChange={(v) => setValue("status", v as "active"|"inactive", { shouldValidate: true })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+          <Select
+            value={watch("status")}
+            onValueChange={(v) =>
+              setValue("status", v as "active" | "inactive", {
+                shouldValidate: true,
+              })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="inactive">Inactive</SelectItem>
+              <SelectItem value="inactive">
+                Inactive
+              </SelectItem>
             </SelectContent>
           </Select>
         </Field>

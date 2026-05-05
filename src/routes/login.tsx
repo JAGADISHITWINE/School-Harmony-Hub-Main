@@ -29,52 +29,99 @@ const schema = z.object({
   email: z.string().trim().email("Invalid email"),
   password: z.string().min(6, "Min 6 characters"),
 });
+
 type FormValues = z.infer<typeof schema>;
+
 const REMEMBER_EMAIL_KEY = "sms_remember_email";
+const REMEMBER_PASSWORD_KEY = "sms_remember_password";
+const REMEMBER_ME_KEY = "sms_remember_me";
 
 function LoginPage() {
-  const login = useAuth(s => s.login);
+  const login = useAuth((s) => s.login);
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+
+  // ✅ Read from localStorage safely
   const rememberedEmail =
     typeof window !== "undefined" ? localStorage.getItem(REMEMBER_EMAIL_KEY) || "" : "";
-  const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
+
+  const rememberedPassword =
+    typeof window !== "undefined" ? localStorage.getItem(REMEMBER_PASSWORD_KEY) || "" : "";
+
+  const rememberedMe =
+    typeof window !== "undefined" ? localStorage.getItem(REMEMBER_ME_KEY) === "true" : false;
+
+  // ✅ Initialize checkbox properly
+  const [rememberMe, setRememberMe] = useState(rememberedMe);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<FormValues>({
     resolver: zResolver(schema),
-    defaultValues: { email: rememberedEmail, password: "" },
+    defaultValues: {
+      email: rememberedEmail,
+      password: rememberedPassword,
+    },
   });
 
   const onSubmit = async (v: FormValues) => {
     setSubmitting(true);
     try {
       await login(v.email, v.password);
+
       try {
         await api.get(MENUS_ME_ENDPOINT);
       } catch {}
+
+      // ✅ Handle remember me correctly
       if (rememberMe) {
         localStorage.setItem(REMEMBER_EMAIL_KEY, v.email);
+        localStorage.setItem(REMEMBER_PASSWORD_KEY, v.password);
+        localStorage.setItem(REMEMBER_ME_KEY, "true");
       } else {
         localStorage.removeItem(REMEMBER_EMAIL_KEY);
+        localStorage.removeItem(REMEMBER_PASSWORD_KEY);
+        localStorage.removeItem(REMEMBER_ME_KEY);
       }
+
       toast.success("Welcome back");
       navigate({ to: "/dashboard" });
-    } catch {} finally { setSubmitting(false); }
+    } catch (err) {
+      toast.error("Login failed");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background text-foreground">
       <div className="hidden lg:flex flex-col justify-between p-12 relative overflow-hidden border-r border-border">
-        <div className="absolute inset-0 opacity-30" style={{ background: "radial-gradient(800px circle at 20% 20%, oklch(0.74 0.16 162 / 0.25), transparent 50%), radial-gradient(600px circle at 80% 80%, oklch(0.6 0.14 200 / 0.2), transparent 60%)" }} />
+        <div
+          className="absolute inset-0 opacity-30"
+          style={{
+            background:
+              "radial-gradient(800px circle at 20% 20%, oklch(0.74 0.16 162 / 0.25), transparent 50%), radial-gradient(600px circle at 80% 80%, oklch(0.6 0.14 200 / 0.2), transparent 60%)",
+          }}
+        />
+
         <div className="relative flex items-center gap-3">
-          <div className="h-11 w-11 rounded-xl grid place-items-center" style={{ background: "var(--gradient-emerald)" }}>
+          <div
+            className="h-11 w-11 rounded-xl grid place-items-center"
+            style={{ background: "var(--gradient-emerald)" }}
+          >
             <GraduationCap className="h-6 w-6 text-[oklch(0.18_0.02_160)]" />
           </div>
           <div>
             <p className="text-lg font-semibold">Scholaris</p>
-            <p className="text-xs uppercase tracking-widest text-muted-foreground">School Admin Suite</p>
+            <p className="text-xs uppercase tracking-widest text-muted-foreground">
+              School Admin Suite
+            </p>
           </div>
         </div>
+
         <div className="relative">
           <h2 className="text-3xl font-semibold leading-tight max-w-md">
             Manage your campus with one calm, focused workspace.
@@ -83,61 +130,60 @@ function LoginPage() {
             Students, staff, classes, attendance, fees and broadcasts — all behind one role-based dashboard.
           </p>
         </div>
+
         <p className="relative text-xs text-muted-foreground">© Scholaris 2025</p>
       </div>
 
       <div className="flex items-center justify-center p-6 sm:p-12">
         <Card className="w-full max-w-md p-8 bg-card border-border">
           <h1 className="text-2xl font-semibold">Sign in</h1>
-          <p className="text-sm text-muted-foreground mt-1">Use your admin credentials to continue.</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Use your admin credentials to continue.
+          </p>
 
           <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" {...register("email")} className="bg-background" />
-              {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+              <Label>Email</Label>
+              <Input type="email" {...register("email")} />
+              {errors.email && (
+                <p className="text-xs text-destructive">{errors.email.message}</p>
+              )}
             </div>
+
             <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
+              <Label>Password</Label>
               <div className="relative">
                 <Input
-                  id="password"
                   type={showPassword ? "text" : "password"}
                   {...register("password")}
-                  className="bg-background pr-10"
+                  className="pr-10"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword(v => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2"
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
-              {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
+              {errors.password && (
+                <p className="text-xs text-destructive">{errors.password.message}</p>
+              )}
             </div>
+
             <div className="flex items-center gap-2">
               <Checkbox
-                id="remember_me"
                 checked={rememberMe}
-                onCheckedChange={(checked) => setRememberMe(checked === true)}
+                onCheckedChange={(c) => setRememberMe(c === true)}
               />
-              <Label htmlFor="remember_me" className="text-sm font-normal cursor-pointer">Remember me</Label>
+              <Label className="text-sm font-normal">Remember me</Label>
             </div>
+
             <Button type="submit" className="w-full" disabled={submitting}>
-              {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Sign in
             </Button>
           </form>
-
-          <div className="mt-6 rounded-lg border border-border bg-background/50 p-3 text-xs text-muted-foreground space-y-1">
-            <p className="font-medium text-foreground">Demo accounts (password: admin123)</p>
-            <p>admin@school.io — Super Admin</p>
-            <p>priya@school.io — Admin</p>
-            <p>john@school.io — Teacher</p>
-            <p>maria@school.io — Accountant</p>
-          </div>
         </Card>
       </div>
     </div>
