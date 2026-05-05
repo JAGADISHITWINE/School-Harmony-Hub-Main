@@ -11,7 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
-import { Route as AppIndexRouteImport } from './routes/_app.index'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppUsersRouteImport } from './routes/_app.users'
 import { Route as AppStudentsRouteImport } from './routes/_app.students'
 import { Route as AppStaffRouteImport } from './routes/_app.staff'
@@ -24,6 +24,13 @@ import { Route as AppFeesRouteImport } from './routes/_app.fees'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppClassesRouteImport } from './routes/_app.classes'
 import { Route as AppAttendanceRouteImport } from './routes/_app.attendance'
+import { Route as AppStudentsIndexRouteImport } from './routes/_app.students.index'
+import { Route as AppStudentsStatusRouteImport } from './routes/_app.students.status'
+import { Route as AppStudentsRegistryRouteImport } from './routes/_app.students.registry'
+import { Route as AppStudentsGuardiansRouteImport } from './routes/_app.students.guardians'
+import { Route as AppStudentsDocumentsRouteImport } from './routes/_app.students.documents'
+import { Route as AppStudentsAdmissionsRouteImport } from './routes/_app.students.admissions'
+import { Route as AppStudentsAcademicRecordsRouteImport } from './routes/_app.students.academic-records'
 import { Route as AppSettingsUsersRouteImport } from './routes/_app.settings.users'
 import { Route as AppSettingsRolesRouteImport } from './routes/_app.settings.roles'
 import { Route as AppSettingsPermsRouteImport } from './routes/_app.settings.perms'
@@ -44,10 +51,10 @@ const AppRoute = AppRouteImport.update({
   id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppIndexRoute = AppIndexRouteImport.update({
+const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => AppRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AppUsersRoute = AppUsersRouteImport.update({
   id: '/users',
@@ -109,6 +116,42 @@ const AppAttendanceRoute = AppAttendanceRouteImport.update({
   path: '/attendance',
   getParentRoute: () => AppRoute,
 } as any)
+const AppStudentsIndexRoute = AppStudentsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppStudentsRoute,
+} as any)
+const AppStudentsStatusRoute = AppStudentsStatusRouteImport.update({
+  id: '/status',
+  path: '/status',
+  getParentRoute: () => AppStudentsRoute,
+} as any)
+const AppStudentsRegistryRoute = AppStudentsRegistryRouteImport.update({
+  id: '/registry',
+  path: '/registry',
+  getParentRoute: () => AppStudentsRoute,
+} as any)
+const AppStudentsGuardiansRoute = AppStudentsGuardiansRouteImport.update({
+  id: '/guardians',
+  path: '/guardians',
+  getParentRoute: () => AppStudentsRoute,
+} as any)
+const AppStudentsDocumentsRoute = AppStudentsDocumentsRouteImport.update({
+  id: '/documents',
+  path: '/documents',
+  getParentRoute: () => AppStudentsRoute,
+} as any)
+const AppStudentsAdmissionsRoute = AppStudentsAdmissionsRouteImport.update({
+  id: '/admissions',
+  path: '/admissions',
+  getParentRoute: () => AppStudentsRoute,
+} as any)
+const AppStudentsAcademicRecordsRoute =
+  AppStudentsAcademicRecordsRouteImport.update({
+    id: '/academic-records',
+    path: '/academic-records',
+    getParentRoute: () => AppStudentsRoute,
+  } as any)
 const AppSettingsUsersRoute = AppSettingsUsersRouteImport.update({
   id: '/settings/users',
   path: '/settings/users',
@@ -161,7 +204,7 @@ const AppAcademicBranchesRoute = AppAcademicBranchesRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof AppIndexRoute
+  '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/attendance': typeof AppAttendanceRoute
   '/classes': typeof AppClassesRoute
@@ -173,7 +216,7 @@ export interface FileRoutesByFullPath {
   '/organizations': typeof AppOrganizationsRoute
   '/roles': typeof AppRolesRoute
   '/staff': typeof AppStaffRoute
-  '/students': typeof AppStudentsRoute
+  '/students': typeof AppStudentsRouteWithChildren
   '/users': typeof AppUsersRoute
   '/academic/branches': typeof AppAcademicBranchesRoute
   '/academic/classes': typeof AppAcademicClassesRoute
@@ -185,8 +228,16 @@ export interface FileRoutesByFullPath {
   '/settings/perms': typeof AppSettingsPermsRoute
   '/settings/roles': typeof AppSettingsRolesRoute
   '/settings/users': typeof AppSettingsUsersRoute
+  '/students/academic-records': typeof AppStudentsAcademicRecordsRoute
+  '/students/admissions': typeof AppStudentsAdmissionsRoute
+  '/students/documents': typeof AppStudentsDocumentsRoute
+  '/students/guardians': typeof AppStudentsGuardiansRoute
+  '/students/registry': typeof AppStudentsRegistryRoute
+  '/students/status': typeof AppStudentsStatusRoute
+  '/students/': typeof AppStudentsIndexRoute
 }
 export interface FileRoutesByTo {
+  '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/attendance': typeof AppAttendanceRoute
   '/classes': typeof AppClassesRoute
@@ -198,9 +249,7 @@ export interface FileRoutesByTo {
   '/organizations': typeof AppOrganizationsRoute
   '/roles': typeof AppRolesRoute
   '/staff': typeof AppStaffRoute
-  '/students': typeof AppStudentsRoute
   '/users': typeof AppUsersRoute
-  '/': typeof AppIndexRoute
   '/academic/branches': typeof AppAcademicBranchesRoute
   '/academic/classes': typeof AppAcademicClassesRoute
   '/academic/courses': typeof AppAcademicCoursesRoute
@@ -211,9 +260,17 @@ export interface FileRoutesByTo {
   '/settings/perms': typeof AppSettingsPermsRoute
   '/settings/roles': typeof AppSettingsRolesRoute
   '/settings/users': typeof AppSettingsUsersRoute
+  '/students/academic-records': typeof AppStudentsAcademicRecordsRoute
+  '/students/admissions': typeof AppStudentsAdmissionsRoute
+  '/students/documents': typeof AppStudentsDocumentsRoute
+  '/students/guardians': typeof AppStudentsGuardiansRoute
+  '/students/registry': typeof AppStudentsRegistryRoute
+  '/students/status': typeof AppStudentsStatusRoute
+  '/students': typeof AppStudentsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
   '/_app/attendance': typeof AppAttendanceRoute
@@ -226,9 +283,8 @@ export interface FileRoutesById {
   '/_app/organizations': typeof AppOrganizationsRoute
   '/_app/roles': typeof AppRolesRoute
   '/_app/staff': typeof AppStaffRoute
-  '/_app/students': typeof AppStudentsRoute
+  '/_app/students': typeof AppStudentsRouteWithChildren
   '/_app/users': typeof AppUsersRoute
-  '/_app/': typeof AppIndexRoute
   '/_app/academic/branches': typeof AppAcademicBranchesRoute
   '/_app/academic/classes': typeof AppAcademicClassesRoute
   '/_app/academic/courses': typeof AppAcademicCoursesRoute
@@ -239,6 +295,13 @@ export interface FileRoutesById {
   '/_app/settings/perms': typeof AppSettingsPermsRoute
   '/_app/settings/roles': typeof AppSettingsRolesRoute
   '/_app/settings/users': typeof AppSettingsUsersRoute
+  '/_app/students/academic-records': typeof AppStudentsAcademicRecordsRoute
+  '/_app/students/admissions': typeof AppStudentsAdmissionsRoute
+  '/_app/students/documents': typeof AppStudentsDocumentsRoute
+  '/_app/students/guardians': typeof AppStudentsGuardiansRoute
+  '/_app/students/registry': typeof AppStudentsRegistryRoute
+  '/_app/students/status': typeof AppStudentsStatusRoute
+  '/_app/students/': typeof AppStudentsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -267,8 +330,16 @@ export interface FileRouteTypes {
     | '/settings/perms'
     | '/settings/roles'
     | '/settings/users'
+    | '/students/academic-records'
+    | '/students/admissions'
+    | '/students/documents'
+    | '/students/guardians'
+    | '/students/registry'
+    | '/students/status'
+    | '/students/'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/'
     | '/login'
     | '/attendance'
     | '/classes'
@@ -280,9 +351,7 @@ export interface FileRouteTypes {
     | '/organizations'
     | '/roles'
     | '/staff'
-    | '/students'
     | '/users'
-    | '/'
     | '/academic/branches'
     | '/academic/classes'
     | '/academic/courses'
@@ -293,8 +362,16 @@ export interface FileRouteTypes {
     | '/settings/perms'
     | '/settings/roles'
     | '/settings/users'
+    | '/students/academic-records'
+    | '/students/admissions'
+    | '/students/documents'
+    | '/students/guardians'
+    | '/students/registry'
+    | '/students/status'
+    | '/students'
   id:
     | '__root__'
+    | '/'
     | '/_app'
     | '/login'
     | '/_app/attendance'
@@ -309,7 +386,6 @@ export interface FileRouteTypes {
     | '/_app/staff'
     | '/_app/students'
     | '/_app/users'
-    | '/_app/'
     | '/_app/academic/branches'
     | '/_app/academic/classes'
     | '/_app/academic/courses'
@@ -320,9 +396,17 @@ export interface FileRouteTypes {
     | '/_app/settings/perms'
     | '/_app/settings/roles'
     | '/_app/settings/users'
+    | '/_app/students/academic-records'
+    | '/_app/students/admissions'
+    | '/_app/students/documents'
+    | '/_app/students/guardians'
+    | '/_app/students/registry'
+    | '/_app/students/status'
+    | '/_app/students/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
 }
@@ -343,12 +427,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_app/': {
-      id: '/_app/'
+    '/': {
+      id: '/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof AppIndexRouteImport
-      parentRoute: typeof AppRoute
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_app/users': {
       id: '/_app/users'
@@ -434,6 +518,55 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAttendanceRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/students/': {
+      id: '/_app/students/'
+      path: '/'
+      fullPath: '/students/'
+      preLoaderRoute: typeof AppStudentsIndexRouteImport
+      parentRoute: typeof AppStudentsRoute
+    }
+    '/_app/students/status': {
+      id: '/_app/students/status'
+      path: '/status'
+      fullPath: '/students/status'
+      preLoaderRoute: typeof AppStudentsStatusRouteImport
+      parentRoute: typeof AppStudentsRoute
+    }
+    '/_app/students/registry': {
+      id: '/_app/students/registry'
+      path: '/registry'
+      fullPath: '/students/registry'
+      preLoaderRoute: typeof AppStudentsRegistryRouteImport
+      parentRoute: typeof AppStudentsRoute
+    }
+    '/_app/students/guardians': {
+      id: '/_app/students/guardians'
+      path: '/guardians'
+      fullPath: '/students/guardians'
+      preLoaderRoute: typeof AppStudentsGuardiansRouteImport
+      parentRoute: typeof AppStudentsRoute
+    }
+    '/_app/students/documents': {
+      id: '/_app/students/documents'
+      path: '/documents'
+      fullPath: '/students/documents'
+      preLoaderRoute: typeof AppStudentsDocumentsRouteImport
+      parentRoute: typeof AppStudentsRoute
+    }
+    '/_app/students/admissions': {
+      id: '/_app/students/admissions'
+      path: '/admissions'
+      fullPath: '/students/admissions'
+      preLoaderRoute: typeof AppStudentsAdmissionsRouteImport
+      parentRoute: typeof AppStudentsRoute
+    }
+    '/_app/students/academic-records': {
+      id: '/_app/students/academic-records'
+      path: '/academic-records'
+      fullPath: '/students/academic-records'
+      preLoaderRoute: typeof AppStudentsAcademicRecordsRouteImport
+      parentRoute: typeof AppStudentsRoute
+    }
     '/_app/settings/users': {
       id: '/_app/settings/users'
       path: '/settings/users'
@@ -507,6 +640,30 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppStudentsRouteChildren {
+  AppStudentsAcademicRecordsRoute: typeof AppStudentsAcademicRecordsRoute
+  AppStudentsAdmissionsRoute: typeof AppStudentsAdmissionsRoute
+  AppStudentsDocumentsRoute: typeof AppStudentsDocumentsRoute
+  AppStudentsGuardiansRoute: typeof AppStudentsGuardiansRoute
+  AppStudentsRegistryRoute: typeof AppStudentsRegistryRoute
+  AppStudentsStatusRoute: typeof AppStudentsStatusRoute
+  AppStudentsIndexRoute: typeof AppStudentsIndexRoute
+}
+
+const AppStudentsRouteChildren: AppStudentsRouteChildren = {
+  AppStudentsAcademicRecordsRoute: AppStudentsAcademicRecordsRoute,
+  AppStudentsAdmissionsRoute: AppStudentsAdmissionsRoute,
+  AppStudentsDocumentsRoute: AppStudentsDocumentsRoute,
+  AppStudentsGuardiansRoute: AppStudentsGuardiansRoute,
+  AppStudentsRegistryRoute: AppStudentsRegistryRoute,
+  AppStudentsStatusRoute: AppStudentsStatusRoute,
+  AppStudentsIndexRoute: AppStudentsIndexRoute,
+}
+
+const AppStudentsRouteWithChildren = AppStudentsRoute._addFileChildren(
+  AppStudentsRouteChildren,
+)
+
 interface AppRouteChildren {
   AppAttendanceRoute: typeof AppAttendanceRoute
   AppClassesRoute: typeof AppClassesRoute
@@ -518,9 +675,8 @@ interface AppRouteChildren {
   AppOrganizationsRoute: typeof AppOrganizationsRoute
   AppRolesRoute: typeof AppRolesRoute
   AppStaffRoute: typeof AppStaffRoute
-  AppStudentsRoute: typeof AppStudentsRoute
+  AppStudentsRoute: typeof AppStudentsRouteWithChildren
   AppUsersRoute: typeof AppUsersRoute
-  AppIndexRoute: typeof AppIndexRoute
   AppAcademicBranchesRoute: typeof AppAcademicBranchesRoute
   AppAcademicClassesRoute: typeof AppAcademicClassesRoute
   AppAcademicCoursesRoute: typeof AppAcademicCoursesRoute
@@ -544,9 +700,8 @@ const AppRouteChildren: AppRouteChildren = {
   AppOrganizationsRoute: AppOrganizationsRoute,
   AppRolesRoute: AppRolesRoute,
   AppStaffRoute: AppStaffRoute,
-  AppStudentsRoute: AppStudentsRoute,
+  AppStudentsRoute: AppStudentsRouteWithChildren,
   AppUsersRoute: AppUsersRoute,
-  AppIndexRoute: AppIndexRoute,
   AppAcademicBranchesRoute: AppAcademicBranchesRoute,
   AppAcademicClassesRoute: AppAcademicClassesRoute,
   AppAcademicCoursesRoute: AppAcademicCoursesRoute,
@@ -562,6 +717,7 @@ const AppRouteChildren: AppRouteChildren = {
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
+  IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
 }

@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -11,17 +11,11 @@ import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/store/auth";
 import { toast } from "sonner";
-import { isLikelyAuthenticated } from "@/lib/auth-guards";
 import { api } from "@/services";
 import { MENUS_ME_ENDPOINT } from "@/services/endpoints";
 
 export const Route = createFileRoute("/login")({
   head: () => ({ meta: [{ title: "Sign in — Scholaris" }] }),
-  beforeLoad: () => {
-    if (typeof window !== "undefined" && isLikelyAuthenticated()) {
-      throw redirect({ to: "/dashboard" });
-    }
-  },
   component: LoginPage,
 });
 
