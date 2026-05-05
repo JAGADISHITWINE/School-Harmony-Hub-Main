@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { RolesPage } from "@/modules/roles/RolesPage";
+import { PermissionsPage } from "@/modules/permissions/PermissionsPage";
 
 export const Route = createFileRoute("/_app/settings/perms")({
-  component: RolesPage,
+  component: PermissionsPage,
 });

@@ -107,6 +107,7 @@ export interface NotificationRecord {
 
 export interface AuthUser extends User {
   institution_id?: string;
+  organization_id?: string;
   permissions: Permission[];
   token: string;
   menus?: MenuItem[];

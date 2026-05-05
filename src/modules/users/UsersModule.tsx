@@ -14,8 +14,21 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { zResolver } from "@/modules/zodResolver";
 import { api } from "@/services";
 import { useAuth } from "@/store/auth";
-import type { User } from "@/types";
 import { Eye, EyeOff } from "lucide-react";
+
+interface BackendUser {
+  id: string;
+  institution_id: string;
+  role_id?: string | null;
+  role_name?: string | null;
+  email: string;
+  username: string;
+  full_name: string;
+  phone?: string | null;
+  is_active: boolean;
+  is_superuser: boolean;
+  created_at: string;
+}
 
 /* =========================
    SESSION HELPER
@@ -41,6 +54,13 @@ const generateUsername = (fullName: string) => {
   const firstName = fullName.trim().split(" ")[0].toLowerCase();
   const clean = firstName.replace(/[^a-z]/g, "");
   return clean || "user";
+};
+
+const formatDateTime = (value?: string | null) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString();
 };
 
 /* =========================
@@ -70,7 +90,7 @@ type V = z.infer<typeof schema>;
 /* =========================
    MODULE
 ========================= */
-export const UsersModule = createCrudModule<User, V>({
+export const UsersModule = createCrudModule<BackendUser, V>({
   base: "/users",
   title: "Users",
   description: "Manage platform users and assign roles.",
@@ -94,19 +114,24 @@ export const UsersModule = createCrudModule<User, V>({
 
   toFormValues: (u) => ({
     full_name: u.full_name,
-    phone: u.phone,
+    phone: u.phone || "",
     email: u.email,
-    username: (u as any).username || "", // ✅ ADDED
+    username: u.username || "", // ✅ ADDED
     password: "",
-    role_id: (u as any).role_id || "",
-    institution_id: (u as any).institution_id || "",
-    status: u.status,
+    role_id: u.role_id || "",
+    institution_id: u.institution_id || "",
+    status: u.is_active ? "active" : "inactive",
   }),
 
   transform: (values) => ({
-    ...values,
+    full_name: values.full_name,
+    phone: values.phone,
+    email: values.email,
+    username: values.username,
     password: values.password || undefined,
-    organization_id: values.organization_id,
+    role_id: values.role_id,
+    institution_id: values.institution_id,
+    is_active: values.status === "active",
   }),
 
   /* =========================
@@ -144,18 +169,18 @@ export const UsersModule = createCrudModule<User, V>({
       ),
     },
     {
-      key: "status",
+      key: "is_active",
       header: "Status",
       sortable: true,
-      cell: (r) => <StatusBadge value={r.status} />,
+      cell: (r) => <StatusBadge value={r.is_active ? "active" : "inactive"} />,
     },
     {
-      key: "createdAt",
+      key: "created_at",
       header: "Created",
       sortable: true,
       cell: (r) => (
         <span className="text-muted-foreground">
-          {r.createdAt}
+          {formatDateTime(r.created_at)}
         </span>
       ),
     },
@@ -187,7 +212,7 @@ export const UsersModule = createCrudModule<User, V>({
       const load = async () => {
         try {
           setLoadingRoles(true);
-          const r = await api.get("/roles");
+          const r = await api.get<any>("/roles");
           setRoles(r.data?.items || r.data || []);
         } catch {
           setRoles([]);
@@ -201,7 +226,7 @@ export const UsersModule = createCrudModule<User, V>({
             user?.organization_id || getOrgIdFromSession();
           if (!orgId) return;
 
-          const res = await api.get(
+          const res = await api.get<any>(
             `/institutions?org_id=${orgId}`
           );
           setInstitutions(res.data?.items || res.data || []);
@@ -214,16 +239,6 @@ export const UsersModule = createCrudModule<User, V>({
 
       load();
     }, []);
-
-    /* SET ORG */
-    useEffect(() => {
-      const orgId =
-        user?.organization_id || getOrgIdFromSession();
-
-      if (orgId) {
-        setValue("organization_id", orgId);
-      }
-    }, [user]);
 
     /* 🔥 AUTO USERNAME */
     useEffect(() => {

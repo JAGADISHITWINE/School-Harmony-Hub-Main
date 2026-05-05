@@ -28,6 +28,12 @@ import { Route as AppSettingsUsersRouteImport } from './routes/_app.settings.use
 import { Route as AppSettingsRolesRouteImport } from './routes/_app.settings.roles'
 import { Route as AppSettingsPermsRouteImport } from './routes/_app.settings.perms'
 import { Route as AppSettingsMenusRouteImport } from './routes/_app.settings.menus'
+import { Route as AppAcademicYearsRouteImport } from './routes/_app.academic.years'
+import { Route as AppAcademicSubjectsRouteImport } from './routes/_app.academic.subjects'
+import { Route as AppAcademicSectionsRouteImport } from './routes/_app.academic.sections'
+import { Route as AppAcademicCoursesRouteImport } from './routes/_app.academic.courses'
+import { Route as AppAcademicClassesRouteImport } from './routes/_app.academic.classes'
+import { Route as AppAcademicBranchesRouteImport } from './routes/_app.academic.branches'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -123,6 +129,36 @@ const AppSettingsMenusRoute = AppSettingsMenusRouteImport.update({
   path: '/settings/menus',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAcademicYearsRoute = AppAcademicYearsRouteImport.update({
+  id: '/academic/years',
+  path: '/academic/years',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAcademicSubjectsRoute = AppAcademicSubjectsRouteImport.update({
+  id: '/academic/subjects',
+  path: '/academic/subjects',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAcademicSectionsRoute = AppAcademicSectionsRouteImport.update({
+  id: '/academic/sections',
+  path: '/academic/sections',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAcademicCoursesRoute = AppAcademicCoursesRouteImport.update({
+  id: '/academic/courses',
+  path: '/academic/courses',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAcademicClassesRoute = AppAcademicClassesRouteImport.update({
+  id: '/academic/classes',
+  path: '/academic/classes',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAcademicBranchesRoute = AppAcademicBranchesRouteImport.update({
+  id: '/academic/branches',
+  path: '/academic/branches',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -139,6 +175,12 @@ export interface FileRoutesByFullPath {
   '/staff': typeof AppStaffRoute
   '/students': typeof AppStudentsRoute
   '/users': typeof AppUsersRoute
+  '/academic/branches': typeof AppAcademicBranchesRoute
+  '/academic/classes': typeof AppAcademicClassesRoute
+  '/academic/courses': typeof AppAcademicCoursesRoute
+  '/academic/sections': typeof AppAcademicSectionsRoute
+  '/academic/subjects': typeof AppAcademicSubjectsRoute
+  '/academic/years': typeof AppAcademicYearsRoute
   '/settings/menus': typeof AppSettingsMenusRoute
   '/settings/perms': typeof AppSettingsPermsRoute
   '/settings/roles': typeof AppSettingsRolesRoute
@@ -159,6 +201,12 @@ export interface FileRoutesByTo {
   '/students': typeof AppStudentsRoute
   '/users': typeof AppUsersRoute
   '/': typeof AppIndexRoute
+  '/academic/branches': typeof AppAcademicBranchesRoute
+  '/academic/classes': typeof AppAcademicClassesRoute
+  '/academic/courses': typeof AppAcademicCoursesRoute
+  '/academic/sections': typeof AppAcademicSectionsRoute
+  '/academic/subjects': typeof AppAcademicSubjectsRoute
+  '/academic/years': typeof AppAcademicYearsRoute
   '/settings/menus': typeof AppSettingsMenusRoute
   '/settings/perms': typeof AppSettingsPermsRoute
   '/settings/roles': typeof AppSettingsRolesRoute
@@ -181,6 +229,12 @@ export interface FileRoutesById {
   '/_app/students': typeof AppStudentsRoute
   '/_app/users': typeof AppUsersRoute
   '/_app/': typeof AppIndexRoute
+  '/_app/academic/branches': typeof AppAcademicBranchesRoute
+  '/_app/academic/classes': typeof AppAcademicClassesRoute
+  '/_app/academic/courses': typeof AppAcademicCoursesRoute
+  '/_app/academic/sections': typeof AppAcademicSectionsRoute
+  '/_app/academic/subjects': typeof AppAcademicSubjectsRoute
+  '/_app/academic/years': typeof AppAcademicYearsRoute
   '/_app/settings/menus': typeof AppSettingsMenusRoute
   '/_app/settings/perms': typeof AppSettingsPermsRoute
   '/_app/settings/roles': typeof AppSettingsRolesRoute
@@ -203,6 +257,12 @@ export interface FileRouteTypes {
     | '/staff'
     | '/students'
     | '/users'
+    | '/academic/branches'
+    | '/academic/classes'
+    | '/academic/courses'
+    | '/academic/sections'
+    | '/academic/subjects'
+    | '/academic/years'
     | '/settings/menus'
     | '/settings/perms'
     | '/settings/roles'
@@ -223,6 +283,12 @@ export interface FileRouteTypes {
     | '/students'
     | '/users'
     | '/'
+    | '/academic/branches'
+    | '/academic/classes'
+    | '/academic/courses'
+    | '/academic/sections'
+    | '/academic/subjects'
+    | '/academic/years'
     | '/settings/menus'
     | '/settings/perms'
     | '/settings/roles'
@@ -244,6 +310,12 @@ export interface FileRouteTypes {
     | '/_app/students'
     | '/_app/users'
     | '/_app/'
+    | '/_app/academic/branches'
+    | '/_app/academic/classes'
+    | '/_app/academic/courses'
+    | '/_app/academic/sections'
+    | '/_app/academic/subjects'
+    | '/_app/academic/years'
     | '/_app/settings/menus'
     | '/_app/settings/perms'
     | '/_app/settings/roles'
@@ -390,6 +462,48 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsMenusRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/academic/years': {
+      id: '/_app/academic/years'
+      path: '/academic/years'
+      fullPath: '/academic/years'
+      preLoaderRoute: typeof AppAcademicYearsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/academic/subjects': {
+      id: '/_app/academic/subjects'
+      path: '/academic/subjects'
+      fullPath: '/academic/subjects'
+      preLoaderRoute: typeof AppAcademicSubjectsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/academic/sections': {
+      id: '/_app/academic/sections'
+      path: '/academic/sections'
+      fullPath: '/academic/sections'
+      preLoaderRoute: typeof AppAcademicSectionsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/academic/courses': {
+      id: '/_app/academic/courses'
+      path: '/academic/courses'
+      fullPath: '/academic/courses'
+      preLoaderRoute: typeof AppAcademicCoursesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/academic/classes': {
+      id: '/_app/academic/classes'
+      path: '/academic/classes'
+      fullPath: '/academic/classes'
+      preLoaderRoute: typeof AppAcademicClassesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/academic/branches': {
+      id: '/_app/academic/branches'
+      path: '/academic/branches'
+      fullPath: '/academic/branches'
+      preLoaderRoute: typeof AppAcademicBranchesRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
@@ -407,6 +521,12 @@ interface AppRouteChildren {
   AppStudentsRoute: typeof AppStudentsRoute
   AppUsersRoute: typeof AppUsersRoute
   AppIndexRoute: typeof AppIndexRoute
+  AppAcademicBranchesRoute: typeof AppAcademicBranchesRoute
+  AppAcademicClassesRoute: typeof AppAcademicClassesRoute
+  AppAcademicCoursesRoute: typeof AppAcademicCoursesRoute
+  AppAcademicSectionsRoute: typeof AppAcademicSectionsRoute
+  AppAcademicSubjectsRoute: typeof AppAcademicSubjectsRoute
+  AppAcademicYearsRoute: typeof AppAcademicYearsRoute
   AppSettingsMenusRoute: typeof AppSettingsMenusRoute
   AppSettingsPermsRoute: typeof AppSettingsPermsRoute
   AppSettingsRolesRoute: typeof AppSettingsRolesRoute
@@ -427,6 +547,12 @@ const AppRouteChildren: AppRouteChildren = {
   AppStudentsRoute: AppStudentsRoute,
   AppUsersRoute: AppUsersRoute,
   AppIndexRoute: AppIndexRoute,
+  AppAcademicBranchesRoute: AppAcademicBranchesRoute,
+  AppAcademicClassesRoute: AppAcademicClassesRoute,
+  AppAcademicCoursesRoute: AppAcademicCoursesRoute,
+  AppAcademicSectionsRoute: AppAcademicSectionsRoute,
+  AppAcademicSubjectsRoute: AppAcademicSubjectsRoute,
+  AppAcademicYearsRoute: AppAcademicYearsRoute,
   AppSettingsMenusRoute: AppSettingsMenusRoute,
   AppSettingsPermsRoute: AppSettingsPermsRoute,
   AppSettingsRolesRoute: AppSettingsRolesRoute,

@@ -23,6 +23,7 @@ interface ModuleConfig<T extends { id: string }, V extends FieldValues> {
   renderForm: (form: UseFormReturn<V>, mode: "create" | "edit", row: T | null) => ReactNode;
   renderDetails?: (row: T) => ReactNode;
   toFormValues?: (row: T) => DefaultValues<V>;
+  transform?: (values: V, mode: "create" | "edit", row: T | null) => any;
   permissions?: { view?: Permission; manage?: Permission };
   selectable?: boolean;
 }
@@ -52,8 +53,9 @@ export function createCrudModule<T extends { id: string }, V extends FieldValues
     const openView = (row: T) => { setActive(row); setMode("view"); };
 
     const handleSubmit = form.handleSubmit(async (values) => {
-      if (mode === "create") await create(values);
-      else if (mode === "edit" && active) await update(active.id, values);
+      const payload = cfg.transform ? cfg.transform(values, mode === "edit" ? "edit" : "create", active) : values;
+      if (mode === "create") await create(payload);
+      else if (mode === "edit" && active) await update(active.id, payload);
       setMode(null);
     });
 
