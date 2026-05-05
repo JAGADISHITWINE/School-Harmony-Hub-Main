@@ -1,3 +1,39 @@
+/* Force Radix dropdown menu item highlight/focus/active states to be visible */
+.radix-dropdown-item:focus,
+.radix-dropdown-item[data-highlighted],
+.radix-dropdown-item[data-state="active"],
+.radix-dropdown-item[data-state="open"],
+.radix-dropdown-item[data-state="selected"] {
+  background: var(--color-accent, #ede9fe) !important;
+  color: var(--color-accent-foreground, #3730a3) !important;
+}
+/* Fix for dropdown/select hover/focus visibility */
+.radix-select-item[data-highlighted],
+.radix-select-item:focus,
+.radix-select-item:hover,
+.radix-select-item[data-state="active"],
+.radix-select-item[data-state="open"],
+.radix-select-item[data-state="selected"] {
+  background: var(--color-accent, #ede9fe) !important;
+  color: var(--color-accent-foreground, #3730a3) !important;
+}
+
+.radix-select-content,
+.radix-select-viewport,
+.radix-select-dropdown {
+  z-index: 9999 !important;
+}
+
+/* For Radix UI and custom select/dropdown menu items */
+.select-item[data-highlighted],
+.select-item:focus,
+.select-item:hover,
+.dropdown-menu-item[data-highlighted],
+.dropdown-menu-item:focus,
+.dropdown-menu-item:hover {
+  background: var(--color-accent, #ede9fe) !important;
+  color: var(--color-accent-foreground, #3730a3) !important;
+}
 @import "tailwindcss" source(none);
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=DM+Mono:wght@400;500&display=swap');
 @source "../src";
@@ -576,7 +612,7 @@
 
   /* ─── STAT / KPI CARDS ─────────────────── */
   .stat-card {
-    background: oklch(1 0 0);
+    background: oklch(57.697% 0.0012 14.187);
     border: 1px solid oklch(0.88 0.012 255);
     border-radius: var(--radius-lg);
     padding: 1.25rem 1.5rem;
