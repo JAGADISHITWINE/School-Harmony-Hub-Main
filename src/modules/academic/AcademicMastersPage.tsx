@@ -14,7 +14,17 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { useAuth } from "@/store/auth";
 import type { ListParams, Paginated } from "@/types";
 
-type AcademicTab = "academic-years" | "courses" | "branches" | "subjects" | "classes" | "sections";
+type AcademicTab = string;
+
+interface MenuItem {
+  id: string;
+  parent_id: string | null;
+  label: string;
+  route: string | null;
+  icon: string;
+  order_no: number;
+  children: MenuItem[];
+}
 
 interface AcademicYear {
   id: string;
@@ -77,14 +87,46 @@ interface Institution {
   is_active: boolean;
 }
 
-const tabs: { value: AcademicTab; label: string }[] = [
-  { value: "academic-years", label: "Academic Years" },
-  { value: "courses", label: "Courses" },
-  { value: "branches", label: "Branches" },
-  { value: "subjects", label: "Subjects" },
-  { value: "classes", label: "Classes" },
-  { value: "sections", label: "Sections" },
-];
+interface TabMeta {
+  value: string;   // slug used as tab key, e.g. "courses"
+  label: string;   // display label from API, e.g. "Courses"
+  route: string | null;
+  apiResource: string; // REST resource name, e.g. "courses"
+}
+
+/**
+ * Derive a stable tab slug and REST resource purely from the menu item.
+ * - Tab value  = last path segment of the route, lowercased
+ *   e.g.  "/academic/courses" → "courses"
+ *         "/academic/ACC"     → "acc"
+ * - apiResource = same value (the backend route segment IS the resource name).
+ *   Exception: if the segment doesn't match any known resource we keep it as-is;
+ *   the save/load logic handles the mapping.
+ */
+function buildTabMeta(item: MenuItem): TabMeta {
+  let value = item.label.toLowerCase().replace(/\s+/g, "-");
+  let apiResource = value;
+
+  if (item.route) {
+    const segment = item.route.split("/").filter(Boolean).pop()?.toLowerCase() || "";
+    if (segment) {
+      value = segment;
+      apiResource = segment;
+    }
+  }
+
+  return { value, label: item.label, route: item.route, apiResource };
+}
+
+/**
+ * Map a raw route-segment / apiResource to the actual REST endpoint name.
+ * This is the ONLY place we handle oddities like "acc" → "academic-years".
+ * Everything else is passed through as-is.
+ */
+function resolveEndpoint(apiResource: string): string {
+  if (apiResource === "acc") return "academic-years";
+  return apiResource;
+}
 
 const emptyPage = <T,>(): Paginated<T> => ({ data: [], total: 0, page: 1, pageSize: 10 });
 
@@ -119,30 +161,69 @@ function localPage<T>(page: Paginated<T>, params: ListParams) {
   const pageNo = params.page ?? 1;
   const pageSize = params.pageSize ?? 10;
   const start = (pageNo - 1) * pageSize;
-  return {
-    data: page.data.slice(start, start + pageSize),
-    total: page.total,
-    page: pageNo,
-    pageSize,
-  };
+  return { data: page.data.slice(start, start + pageSize), total: page.total, page: pageNo, pageSize };
 }
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
-
+function today() { return new Date().toISOString().slice(0, 10); }
 function nextYear() {
   const d = new Date();
   d.setFullYear(d.getFullYear() + 1);
   return d.toISOString().slice(0, 10);
 }
 
-export function AcademicMastersPage({ initialTab = "academic-years" }: { initialTab?: AcademicTab }) {
+// Search fields per resolved endpoint
+function searchFields(endpoint: string): string[] {
+  if (endpoint === "academic-years") return ["label"];
+  if (endpoint === "courses") return ["name", "code", "level"];
+  if (endpoint === "branches" || endpoint === "subjects") return ["name", "code"];
+  return ["name"];
+}
+
+export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }) {
   const { user } = useAuth();
   const institutionId = user?.institution_id || "";
   const organizationId = user?.organization_id || "";
   const [activeInstitutionId, setActiveInstitutionId] = useState(institutionId);
-  const [activeTab, setActiveTab] = useState<AcademicTab>(initialTab);
+
+  // ── Tabs: fully from API ───────────────────────────────────────────────────
+  const [tabs, setTabs] = useState<TabMeta[]>([]);
+  const [tabsLoading, setTabsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<AcademicTab>("");
+
+  useEffect(() => {
+    (async () => {
+      setTabsLoading(true);
+      try {
+        const res = await api.get<any>("/menus/me");
+        const menuItems: MenuItem[] = Array.isArray(res?.data)
+          ? res.data
+          : Array.isArray(res?.data?.data)
+          ? res.data.data
+          : [];
+
+        const academicMenu = menuItems.find(
+          (item) => item.label.toLowerCase() === "academic" && Array.isArray(item.children)
+        );
+
+        if (academicMenu?.children?.length) {
+          const sorted = [...academicMenu.children].sort((a, b) => a.order_no - b.order_no);
+          const dynamicTabs = sorted.map(buildTabMeta);
+          setTabs(dynamicTabs);
+          setActiveTab(
+            initialTab && dynamicTabs.some((t) => t.value === initialTab)
+              ? initialTab
+              : dynamicTabs[0].value
+          );
+        }
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to load navigation menus");
+      } finally {
+        setTabsLoading(false);
+      }
+    })();
+  }, []);
+
+  // ── State ─────────────────────────────────────────────────────────────────
   const [params, setParams] = useState<ListParams>({ page: 1, pageSize: 10, search: "" });
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -150,12 +231,8 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
   const [editing, setEditing] = useState<any>(null);
   const [institutions, setInstitutions] = useState<Institution[]>([]);
 
-  const [academicYears, setAcademicYears] = useState<Paginated<AcademicYear>>(emptyPage);
-  const [courses, setCourses] = useState<Paginated<Course>>(emptyPage);
-  const [branches, setBranches] = useState<Paginated<Branch>>(emptyPage);
-  const [subjects, setSubjects] = useState<Paginated<Subject>>(emptyPage);
-  const [classes, setClasses] = useState<Paginated<ClassRow>>(emptyPage);
-  const [sections, setSections] = useState<Paginated<Section>>(emptyPage);
+  // Central data store keyed by resolved endpoint name
+  const [dataStore, setDataStore] = useState<Record<string, Paginated<any>>>({});
 
   const [courseFilter, setCourseFilter] = useState("");
   const [branchFilter, setBranchFilter] = useState("");
@@ -167,10 +244,45 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
   const [formBranches, setFormBranches] = useState<Branch[]>([]);
   const [formClasses, setFormClasses] = useState<ClassRow[]>([]);
 
-  const courseOptions = courses.data;
-  const branchOptions = branches.data;
-  const yearOptions = academicYears.data;
-  const classOptions = classes.data;
+  // Active tab metadata + resolved endpoint
+  const activeTabMeta = useMemo(() => tabs.find((t) => t.value === activeTab), [tabs, activeTab]);
+  const activeEndpoint = useMemo(
+    () => resolveEndpoint(activeTabMeta?.apiResource || ""),
+    [activeTabMeta]
+  );
+
+  // Resolved endpoints for each resource type — derived from tabs
+  const endpointOf = useMemo(() => {
+    const map: Record<string, string> = {};
+    tabs.forEach((t) => { map[t.apiResource] = resolveEndpoint(t.apiResource); });
+    return map;
+  }, [tabs]);
+
+  const epCourses = useMemo(
+    () => Object.values(endpointOf).find((e) => e === "courses") || "courses",
+    [endpointOf]
+  );
+  const epBranches = useMemo(
+    () => Object.values(endpointOf).find((e) => e === "branches") || "branches",
+    [endpointOf]
+  );
+  const epYears = useMemo(
+    () => Object.values(endpointOf).find((e) => e === "academic-years") || "academic-years",
+    [endpointOf]
+  );
+  const epClasses = useMemo(
+    () => Object.values(endpointOf).find((e) => e === "classes") || "classes",
+    [endpointOf]
+  );
+  const epSections = useMemo(
+    () => Object.values(endpointOf).find((e) => e === "sections") || "sections",
+    [endpointOf]
+  );
+
+  const courseOptions = useMemo(() => (dataStore[epCourses]?.data || []) as Course[], [dataStore, epCourses]);
+  const branchOptions = useMemo(() => (dataStore[epBranches]?.data || []) as Branch[], [dataStore, epBranches]);
+  const yearOptions = useMemo(() => (dataStore[epYears]?.data || []) as AcademicYear[], [dataStore, epYears]);
+  const classOptions = useMemo(() => (dataStore[epClasses]?.data || []) as ClassRow[], [dataStore, epClasses]);
 
   const courseName = useMemo(() => new Map(courseOptions.map((c) => [c.id, c.name])), [courseOptions]);
   const branchName = useMemo(() => new Map(branchOptions.map((b) => [b.id, b.name])), [branchOptions]);
@@ -179,130 +291,96 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
   const branchToCourse = useMemo(() => new Map(branchOptions.map((b) => [b.id, b.course_id])), [branchOptions]);
   const classToBranch = useMemo(() => new Map(classOptions.map((c) => [c.id, c.branch_id])), [classOptions]);
   const currentInstitution = useMemo(
-    () => institutions.find((item) => item.id === activeInstitutionId) || null,
-    [institutions, activeInstitutionId],
+    () => institutions.find((i) => i.id === activeInstitutionId) || null,
+    [institutions, activeInstitutionId]
   );
 
-  const deriveInstitutionId = (row: any) => {
-    if (row?.institution_id) return row.institution_id as string;
-    if (row?.course_id) {
-      return courseOptions.find((course) => course.id === row.course_id)?.institution_id || activeInstitutionId || institutionId;
-    }
+  const setEpData = (ep: string, page: Paginated<any>) =>
+    setDataStore((prev) => ({ ...prev, [ep]: page }));
+
+  const deriveInstitutionId = (row: any): string => {
+    if (row?.institution_id) return row.institution_id;
+    if (row?.course_id) return courseOptions.find((c) => c.id === row.course_id)?.institution_id || activeInstitutionId;
     if (row?.branch_id) {
-      const courseId = branchToCourse.get(row.branch_id);
-      return courseOptions.find((course) => course.id === courseId)?.institution_id || activeInstitutionId || institutionId;
+      const cid = branchToCourse.get(row.branch_id);
+      return courseOptions.find((c) => c.id === cid)?.institution_id || activeInstitutionId;
     }
     if (row?.class_id) {
-      const branchId = classToBranch.get(row.class_id);
-      const courseId = branchId ? branchToCourse.get(branchId) : "";
-      return courseOptions.find((course) => course.id === courseId)?.institution_id || activeInstitutionId || institutionId;
+      const bid = classToBranch.get(row.class_id);
+      const cid = bid ? branchToCourse.get(bid) : "";
+      return courseOptions.find((c) => c.id === cid)?.institution_id || activeInstitutionId;
     }
     return activeInstitutionId || institutionId;
   };
 
+  // ── Loaders ───────────────────────────────────────────────────────────────
+
   const loadInstitutions = async () => {
     if (!organizationId) {
-      if (institutionId) {
-        setInstitutions([
-          {
-            id: institutionId,
-            org_id: "",
-            name: "Current Institution",
-            code: "",
-            is_active: true,
-          },
-        ]);
-      } else {
-        setInstitutions([]);
-      }
+      setInstitutions(institutionId ? [{ id: institutionId, org_id: "", name: "Current Institution", code: "", is_active: true }] : []);
       return;
     }
-
     try {
       const res = await api.get<any>(`/institutions?org_id=${organizationId}&page=1&page_size=100`);
-      const rows = ((Array.isArray(res?.data?.items) && res.data.items) || []) as Institution[];
-      const activeRows = rows.filter((item) => item.is_active !== false);
-      setInstitutions(activeRows);
-      if (!activeRows.some((item) => item.id === activeInstitutionId)) {
-        setActiveInstitutionId(activeRows[0]?.id || "");
-      }
+      const rows = (Array.isArray(res?.data?.items) ? res.data.items : []) as Institution[];
+      const active = rows.filter((r) => r.is_active !== false);
+      setInstitutions(active);
+      if (!active.some((r) => r.id === activeInstitutionId)) setActiveInstitutionId(active[0]?.id || "");
     } catch {
-      if (institutionId) {
-        setInstitutions([
-          {
-            id: institutionId,
-            org_id: organizationId,
-            name: "Current Institution",
-            code: "",
-            is_active: true,
-          },
-        ]);
-        if (!activeInstitutionId) setActiveInstitutionId(institutionId);
-      } else {
-        setInstitutions([]);
-        setActiveInstitutionId("");
-      }
+      setInstitutions(institutionId ? [{ id: institutionId, org_id: organizationId, name: "Current Institution", code: "", is_active: true }] : []);
+      if (!activeInstitutionId && institutionId) setActiveInstitutionId(institutionId);
     }
+  };
+
+  const fetchEp = async (ep: string, query: string): Promise<Paginated<any> | null> => {
+    if (!query) return null;
+    const res = await api.get<any>(`/${ep}?${query}&page=1&page_size=100`);
+    return pageOf<any>(res);
   };
 
   const loadAcademicYears = async () => {
     if (!activeInstitutionId) return;
-    const res = await api.get<any>(`/academic-years?institution_id=${activeInstitutionId}&page=1&page_size=100`);
-    setAcademicYears(pageOf<AcademicYear>(res));
+    const page = await fetchEp(epYears, `institution_id=${activeInstitutionId}`);
+    if (page) setEpData(epYears, page);
   };
 
   const loadCourses = async () => {
     if (!activeInstitutionId) return;
-    const res = await api.get<any>(`/courses?institution_id=${activeInstitutionId}&page=1&page_size=100`);
-    const page = pageOf<Course>(res);
-    setCourses(page);
-    if (!page.data.some((course) => course.id === courseFilter)) {
-      setCourseFilter(page.data[0]?.id || "");
+    const page = await fetchEp(epCourses, `institution_id=${activeInstitutionId}`);
+    if (page) {
+      setEpData(epCourses, page);
+      if (!page.data.some((c: Course) => c.id === courseFilter)) setCourseFilter(page.data[0]?.id || "");
     }
   };
 
   const loadBranches = async (courseId = courseFilter) => {
-    if (!courseId) {
-      setBranches(emptyPage);
-      return;
-    }
-    const res = await api.get<any>(`/branches?course_id=${courseId}&page=1&page_size=100`);
-    const page = pageOf<Branch>(res);
-    setBranches(page);
-    if (!page.data.some((branch) => branch.id === branchFilter)) {
-      setBranchFilter(page.data[0]?.id || "");
+    if (!courseId) { setEpData(epBranches, emptyPage()); return; }
+    const page = await fetchEp(epBranches, `course_id=${courseId}`);
+    if (page) {
+      setEpData(epBranches, page);
+      if (!page.data.some((b: Branch) => b.id === branchFilter)) setBranchFilter(page.data[0]?.id || "");
     }
   };
 
   const loadSubjects = async (branchId = branchFilter) => {
-    if (!branchId) {
-      setSubjects(emptyPage);
-      return;
-    }
-    const res = await api.get<any>(`/subjects?branch_id=${branchId}&page=1&page_size=100`);
-    setSubjects(pageOf<Subject>(res));
+    if (!branchId) { setEpData("subjects", emptyPage()); return; }
+    const page = await fetchEp("subjects", `branch_id=${branchId}`);
+    if (page) setEpData("subjects", page);
   };
 
   const loadClasses = async (branchId = branchFilter) => {
-    if (!branchId) {
-      setClasses(emptyPage);
-      return;
-    }
-    const res = await api.get<any>(`/classes?branch_id=${branchId}&page=1&page_size=100`);
-    const page = pageOf<ClassRow>(res);
-    setClasses(page);
-    if (!page.data.some((row) => row.id === classFilter)) {
-      setClassFilter(page.data[0]?.id || "");
+    if (!branchId) { setEpData(epClasses, emptyPage()); return; }
+    const page = await fetchEp(epClasses, `branch_id=${branchId}`);
+    if (page) {
+      setEpData(epClasses, page);
+      if (!page.data.some((c: ClassRow) => c.id === classFilter)) setClassFilter(page.data[0]?.id || "");
     }
   };
 
   const loadSections = async (classId = classFilter) => {
-    if (!classId) {
-      setSections(emptyPage);
-      return;
-    }
-    const res = await api.get<any>(`/sections?class_id=${classId}&page=1&page_size=100`);
-    setSections(pageOf<Section>(res));
+    if (!classId) { setEpData(epSections, emptyPage()); return; }
+    const page = await fetchEp(epSections, `class_id=${classId}`);
+    if (page) setEpData(epSections, page);
   };
 
   const loadAll = async () => {
@@ -311,121 +389,98 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
       await loadInstitutions();
       await loadAcademicYears();
       await loadCourses();
-    } catch (error: any) {
-      toast.error(error?.message || "Unable to load academic masters");
+    } catch (err: any) {
+      toast.error(err?.message || "Unable to load academic masters");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    if (institutionId && !activeInstitutionId) setActiveInstitutionId(institutionId);
-  }, [institutionId, activeInstitutionId]);
-
-  useEffect(() => {
-    loadAll();
-  }, [activeInstitutionId, organizationId]);
-
-  useEffect(() => {
-    if (courseFilter) loadBranches(courseFilter).catch(() => {});
-  }, [courseFilter]);
-
+  useEffect(() => { if (institutionId && !activeInstitutionId) setActiveInstitutionId(institutionId); }, [institutionId]);
+  useEffect(() => { loadAll(); }, [activeInstitutionId, organizationId]);
+  useEffect(() => { if (courseFilter) loadBranches(courseFilter).catch(() => {}); }, [courseFilter]);
   useEffect(() => {
     if (branchFilter) {
       loadSubjects(branchFilter).catch(() => {});
       loadClasses(branchFilter).catch(() => {});
     }
   }, [branchFilter]);
+  useEffect(() => { if (classFilter) loadSections(classFilter).catch(() => {}); }, [classFilter]);
 
-  useEffect(() => {
-    if (classFilter) loadSections(classFilter).catch(() => {});
-  }, [classFilter]);
-
+  // Form option loader
   useEffect(() => {
     if (!mode) return;
-    const nextInstitutionId = form.institution_id || activeInstitutionId || institutionId;
-    if (!nextInstitutionId) return;
-
-    const loadFormOptions = async () => {
+    const instId = form.institution_id || activeInstitutionId || institutionId;
+    if (!instId) return;
+    (async () => {
       try {
-        const yearsRes = await api.get<any>(`/academic-years?institution_id=${nextInstitutionId}&page=1&page_size=100`);
+        const yearsRes = await api.get<any>(`/academic-years?institution_id=${instId}&page=1&page_size=100`);
         const nextYears = rowsOf<AcademicYear>(yearsRes);
         setFormAcademicYears(nextYears);
 
-        const coursesRes = await api.get<any>(`/courses?institution_id=${nextInstitutionId}&page=1&page_size=100`);
+        const coursesRes = await api.get<any>(`/courses?institution_id=${instId}&page=1&page_size=100`);
         const nextCourses = rowsOf<Course>(coursesRes);
         setFormCourses(nextCourses);
 
-        const branchResponses = await Promise.all(
-          nextCourses.map((course) =>
-            api.get<any>(`/branches?course_id=${course.id}&page=1&page_size=100`).catch(() => ({ data: { items: [] } })),
-          ),
+        const branchRes = await Promise.all(
+          nextCourses.map((c) => api.get<any>(`/branches?course_id=${c.id}&page=1&page_size=100`).catch(() => ({ data: { items: [] } })))
         );
-        const nextBranches = branchResponses.flatMap((res) => rowsOf<Branch>(res));
+        const nextBranches = branchRes.flatMap((r) => rowsOf<Branch>(r));
         setFormBranches(nextBranches);
 
-        const classResponses = await Promise.all(
-          nextBranches.map((branch) =>
-            api.get<any>(`/classes?branch_id=${branch.id}&page=1&page_size=100`).catch(() => ({ data: { items: [] } })),
-          ),
+        const classRes = await Promise.all(
+          nextBranches.map((b) => api.get<any>(`/classes?branch_id=${b.id}&page=1&page_size=100`).catch(() => ({ data: { items: [] } })))
         );
-        const nextClasses = classResponses.flatMap((res) => rowsOf<ClassRow>(res));
+        const nextClasses = classRes.flatMap((r) => rowsOf<ClassRow>(r));
         setFormClasses(nextClasses);
 
         setForm((prev) => ({
           ...prev,
-          institution_id: nextInstitutionId,
-          course_id: nextCourses.some((course) => course.id === prev.course_id) ? prev.course_id : nextCourses[0]?.id || "",
-          branch_id: nextBranches.some((branch) => branch.id === prev.branch_id) ? prev.branch_id : nextBranches[0]?.id || "",
-          academic_year_id: nextYears.some((year) => year.id === prev.academic_year_id) ? prev.academic_year_id : nextYears[0]?.id || "",
-          class_id: nextClasses.some((row) => row.id === prev.class_id) ? prev.class_id : nextClasses[0]?.id || "",
+          institution_id: instId,
+          course_id: nextCourses.some((c) => c.id === prev.course_id) ? prev.course_id : nextCourses[0]?.id || "",
+          branch_id: nextBranches.some((b) => b.id === prev.branch_id) ? prev.branch_id : nextBranches[0]?.id || "",
+          academic_year_id: nextYears.some((y) => y.id === prev.academic_year_id) ? prev.academic_year_id : nextYears[0]?.id || "",
+          class_id: nextClasses.some((c) => c.id === prev.class_id) ? prev.class_id : nextClasses[0]?.id || "",
         }));
-      } catch (error: any) {
-        toast.error(error?.message || "Unable to load institution data");
+      } catch (err: any) {
+        toast.error(err?.message || "Unable to load form options");
       }
-    };
-
-    loadFormOptions();
+    })();
   }, [mode, form.institution_id, activeInstitutionId, institutionId]);
+
+  // ── Actions ───────────────────────────────────────────────────────────────
 
   const setField = (key: string, value: any) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const openCreate = () => {
     setEditing(null);
     setMode("create");
-    if (activeTab === "academic-years") {
-      setForm({ institution_id: activeInstitutionId || institutionId, label: "", start_date: today(), end_date: nextYear(), is_current: "false", is_active: "true" });
-    } else if (activeTab === "courses") {
-      setForm({ institution_id: activeInstitutionId || institutionId, name: "", code: "", level: "UG", duration_years: 4, is_active: "true" });
-    } else if (activeTab === "branches") {
-      setForm({ institution_id: activeInstitutionId || institutionId, course_id: courseFilter, name: "", code: "", is_active: "true" });
-    } else if (activeTab === "subjects") {
-      setForm({ institution_id: activeInstitutionId || institutionId, branch_id: branchFilter, academic_year_id: "", name: "", code: "", credits: 0, is_active: "true" });
-    } else if (activeTab === "classes") {
-      setForm({ institution_id: activeInstitutionId || institutionId, branch_id: branchFilter, academic_year_id: "", name: "", semester: 1 });
-    } else {
-      setForm({ institution_id: activeInstitutionId || institutionId, class_id: classFilter, name: "", max_strength: 60 });
-    }
+    const base = { institution_id: activeInstitutionId || institutionId };
+    if (activeEndpoint === "academic-years") setForm({ ...base, label: "", start_date: today(), end_date: nextYear(), is_current: "false", is_active: "true" });
+    else if (activeEndpoint === "courses") setForm({ ...base, name: "", code: "", level: "UG", duration_years: 4, is_active: "true" });
+    else if (activeEndpoint === "branches") setForm({ ...base, course_id: courseFilter, name: "", code: "", is_active: "true" });
+    else if (activeEndpoint === "subjects") setForm({ ...base, branch_id: branchFilter, academic_year_id: "", name: "", code: "", credits: 0, is_active: "true" });
+    else if (activeEndpoint === "classes") setForm({ ...base, branch_id: branchFilter, academic_year_id: "", name: "", semester: 1 });
+    else setForm({ ...base, class_id: classFilter, name: "", max_strength: 60 });
   };
 
   const openEdit = (row: any) => {
     setEditing(row);
     setMode("edit");
-    if (activeTab === "academic-years") {
-      setForm({ ...row, institution_id: deriveInstitutionId(row), is_current: row.is_current ? "true" : "false", is_active: row.is_active ? "true" : "false" });
-    } else if (activeTab === "courses" || activeTab === "branches" || activeTab === "subjects") {
-      setForm({ ...row, institution_id: deriveInstitutionId(row), is_active: row.is_active ? "true" : "false" });
+    const base = { ...row, institution_id: deriveInstitutionId(row) };
+    if (["academic-years", "courses", "branches", "subjects"].includes(activeEndpoint)) {
+      setForm({ ...base, is_active: row.is_active ? "true" : "false", ...(activeEndpoint === "academic-years" ? { is_current: row.is_current ? "true" : "false" } : {}) });
     } else {
-      setForm({ ...row, institution_id: deriveInstitutionId(row) });
+      setForm(base);
     }
   };
 
   const refreshActive = async () => {
-    if (activeTab === "academic-years") await loadAcademicYears();
-    else if (activeTab === "courses") await loadCourses();
-    else if (activeTab === "branches") await loadBranches();
-    else if (activeTab === "subjects") await loadSubjects();
-    else if (activeTab === "classes") await loadClasses();
+    if (activeEndpoint === "academic-years") await loadAcademicYears();
+    else if (activeEndpoint === "courses") await loadCourses();
+    else if (activeEndpoint === "branches") await loadBranches();
+    else if (activeEndpoint === "subjects") await loadSubjects();
+    else if (activeEndpoint === "classes") await loadClasses();
     else await loadSections();
   };
 
@@ -433,67 +488,22 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
     if (!form.institution_id) return;
     setBusy(true);
     try {
-      if (activeTab === "academic-years") {
-        const payload = {
-          institution_id: form.institution_id,
-          label: form.label,
-          start_date: form.start_date,
-          end_date: form.end_date,
-          is_current: form.is_current === "true",
-          is_active: form.is_active === "true",
-        };
-        if (editing) await api.patch(`/academic-years/${editing.id}`, payload);
-        else await api.post("/academic-years", payload);
-      } else if (activeTab === "courses") {
-        const payload = {
-          institution_id: form.institution_id,
-          name: form.name,
-          code: form.code,
-          level: form.level,
-          duration_years: Number(form.duration_years),
-          is_active: form.is_active === "true",
-        };
-        if (editing) await api.patch(`/courses/${editing.id}`, payload);
-        else await api.post("/courses", payload);
-      } else if (activeTab === "branches") {
-        const payload = {
-          course_id: form.course_id,
-          name: form.name,
-          code: form.code,
-          is_active: form.is_active === "true",
-        };
-        if (editing) await api.patch(`/branches/${editing.id}`, payload);
-        else await api.post("/branches", payload);
-      } else if (activeTab === "subjects") {
-        const payload = {
-          branch_id: form.branch_id,
-          academic_year_id: form.academic_year_id || null,
-          name: form.name,
-          code: form.code,
-          credits: Number(form.credits),
-          is_active: form.is_active === "true",
-        };
-        if (editing) await api.patch(`/subjects/${editing.id}`, payload);
-        else await api.post("/subjects", payload);
-      } else if (activeTab === "classes") {
-        const payload = {
-          branch_id: form.branch_id,
-          academic_year_id: form.academic_year_id || null,
-          name: form.name,
-          semester: Number(form.semester),
-        };
-        if (editing) await api.patch(`/classes/${editing.id}`, payload);
-        else await api.post("/classes", payload);
+      let payload: any = {};
+      if (activeEndpoint === "academic-years") {
+        payload = { institution_id: form.institution_id, label: form.label, start_date: form.start_date, end_date: form.end_date, is_current: form.is_current === "true", is_active: form.is_active === "true" };
+      } else if (activeEndpoint === "courses") {
+        payload = { institution_id: form.institution_id, name: form.name, code: form.code, level: form.level, duration_years: Number(form.duration_years), is_active: form.is_active === "true" };
+      } else if (activeEndpoint === "branches") {
+        payload = { course_id: form.course_id, name: form.name, code: form.code, is_active: form.is_active === "true" };
+      } else if (activeEndpoint === "subjects") {
+        payload = { branch_id: form.branch_id, academic_year_id: form.academic_year_id || null, name: form.name, code: form.code, credits: Number(form.credits), is_active: form.is_active === "true" };
+      } else if (activeEndpoint === "classes") {
+        payload = { branch_id: form.branch_id, academic_year_id: form.academic_year_id || null, name: form.name, semester: Number(form.semester) };
       } else {
-        const payload = {
-          class_id: form.class_id,
-          name: form.name,
-          max_strength: Number(form.max_strength),
-        };
-        if (editing) await api.patch(`/sections/${editing.id}`, payload);
-        else await api.post("/sections", payload);
+        payload = { class_id: form.class_id, name: form.name, max_strength: Number(form.max_strength) };
       }
-
+      if (editing) await api.patch(`/${activeEndpoint}/${editing.id}`, payload);
+      else await api.post(`/${activeEndpoint}`, payload);
       toast.success("Saved");
       setMode(null);
       await refreshActive();
@@ -502,32 +512,49 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
     }
   };
 
-  const activeData = (() => {
-    if (activeTab === "academic-years") return filterPage(academicYears, params.search, ["label"]);
-    if (activeTab === "courses") return filterPage(courses, params.search, ["name", "code", "level"]);
-    if (activeTab === "branches") return filterPage(branches, params.search, ["name", "code"]);
-    if (activeTab === "subjects") return filterPage(subjects, params.search, ["name", "code"]);
-    if (activeTab === "classes") return filterPage(classes, params.search, ["name"]);
-    return filterPage(sections, params.search, ["name"]);
-  })();
+  // ── Table data ────────────────────────────────────────────────────────────
+
+  const activeData = useMemo(() => {
+    const page = dataStore[activeEndpoint] || emptyPage();
+    return filterPage(page, params.search, searchFields(activeEndpoint) as any);
+  }, [dataStore, activeEndpoint, params.search]);
+
   const tableData = localPage<any>(activeData as Paginated<any>, params);
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  if (tabsLoading) {
+    return <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">Loading navigation...</div>;
+  }
+  if (tabs.length === 0) {
+    return <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">No academic modules configured.</div>;
+  }
 
   return (
     <div>
       <PageHeader
         title="Academic Masters"
         description="Configure academic years, courses, branches, subjects, classes and sections."
-        actions={<Button onClick={openCreate} disabled={!activeInstitutionId}><Plus className="mr-2 h-4 w-4" /> New</Button>}
+        actions={
+          <Button onClick={openCreate} disabled={!activeInstitutionId}>
+            <Plus className="mr-2 h-4 w-4" /> New
+          </Button>
+        }
       />
 
-      <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as AcademicTab); setParams({ page: 1, pageSize: 10, search: "" }); }}>
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => { setActiveTab(v as AcademicTab); setParams({ page: 1, pageSize: 10, search: "" }); }}
+      >
         <TabsList className="mb-4 flex h-auto flex-wrap justify-start">
-          {tabs.map((tab) => <TabsTrigger key={tab.value} value={tab.value}>{tab.label}</TabsTrigger>)}
+          {tabs.map((tab) => (
+            <TabsTrigger key={tab.value} value={tab.value}>{tab.label}</TabsTrigger>
+          ))}
         </TabsList>
       </Tabs>
 
       <Filters
-        activeTab={activeTab}
+        activeEndpoint={activeEndpoint}
         institutions={institutions}
         courses={courseOptions}
         branches={branchOptions}
@@ -536,39 +563,33 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
         courseFilter={courseFilter}
         branchFilter={branchFilter}
         classFilter={classFilter}
-        setActiveInstitutionId={(value) => {
-          setActiveInstitutionId(value);
-          setCourseFilter("");
-          setBranchFilter("");
-          setClassFilter("");
-          setParams((prev) => ({ ...prev, page: 1 }));
-        }}
+        setActiveInstitutionId={(v) => { setActiveInstitutionId(v); setCourseFilter(""); setBranchFilter(""); setClassFilter(""); setParams((p) => ({ ...p, page: 1 })); }}
         setCourseFilter={setCourseFilter}
         setBranchFilter={setBranchFilter}
         setClassFilter={setClassFilter}
       />
 
       <DataTable<any>
-        columns={getColumns(activeTab, { courseName, branchName, yearName, className }, openEdit)}
+        columns={getColumns(activeEndpoint, { courseName, branchName, yearName, className }, openEdit)}
         data={tableData as Paginated<any>}
         loading={loading}
         params={params}
         onParamsChange={setParams}
-        searchPlaceholder={`Search ${tabs.find((t) => t.value === activeTab)?.label.toLowerCase()}...`}
+        searchPlaceholder={`Search ${activeTabMeta?.label.toLowerCase() || ""}...`}
         rowActions={(row) => <Button variant="ghost" size="sm" onClick={() => openEdit(row)}>Edit</Button>}
       />
 
       <FormModal
         open={!!mode}
         onOpenChange={(open) => !open && setMode(null)}
-        title={`${editing ? "Edit" : "New"} ${tabs.find((t) => t.value === activeTab)?.label.slice(0, -1) || "Record"}`}
+        title={`${editing ? "Edit" : "New"} ${activeTabMeta?.label.replace(/s$/, "") || "Record"}`}
         submitLabel={editing ? "Save" : "Create"}
         busy={busy}
         size="lg"
         onSubmit={save}
       >
         <AcademicForm
-          activeTab={activeTab}
+          activeEndpoint={activeEndpoint}
           form={form}
           setField={setField}
           institutions={institutions}
@@ -583,22 +604,14 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
   );
 }
 
+// ── Filters ────────────────────────────────────────────────────────────────
+
 function Filters({
-  activeTab,
-  institutions,
-  courses,
-  branches,
-  classes,
-  activeInstitutionId,
-  courseFilter,
-  branchFilter,
-  classFilter,
-  setActiveInstitutionId,
-  setCourseFilter,
-  setBranchFilter,
-  setClassFilter,
+  activeEndpoint, institutions, courses, branches, classes,
+  activeInstitutionId, courseFilter, branchFilter, classFilter,
+  setActiveInstitutionId, setCourseFilter, setBranchFilter, setClassFilter,
 }: {
-  activeTab: AcademicTab;
+  activeEndpoint: string;
   institutions: Institution[];
   courses: Course[];
   branches: Branch[];
@@ -612,18 +625,16 @@ function Filters({
   setBranchFilter: (v: string) => void;
   setClassFilter: (v: string) => void;
 }) {
+  const needsCourse = ["branches", "subjects", "classes", "sections"].includes(activeEndpoint);
+  const needsBranch = ["subjects", "classes", "sections"].includes(activeEndpoint);
+  const needsClass = activeEndpoint === "sections";
+
   return (
     <div className="mb-4 flex flex-wrap gap-3 rounded-lg border border-border bg-card p-3">
       <Picker label="Institution" value={activeInstitutionId} onChange={setActiveInstitutionId} items={institutions.map((i) => ({ id: i.id, label: i.name }))} />
-      {(activeTab === "branches" || activeTab === "subjects" || activeTab === "classes" || activeTab === "sections") && (
-        <Picker label="Course" value={courseFilter} onChange={setCourseFilter} items={courses.map((c) => ({ id: c.id, label: c.name }))} />
-      )}
-      {(activeTab === "subjects" || activeTab === "classes" || activeTab === "sections") && (
-        <Picker label="Branch" value={branchFilter} onChange={setBranchFilter} items={branches.map((b) => ({ id: b.id, label: b.name }))} />
-      )}
-      {activeTab === "sections" && (
-        <Picker label="Class" value={classFilter} onChange={setClassFilter} items={classes.map((c) => ({ id: c.id, label: c.name }))} />
-      )}
+      {needsCourse && <Picker label="Course" value={courseFilter} onChange={setCourseFilter} items={courses.map((c) => ({ id: c.id, label: c.name }))} />}
+      {needsBranch && <Picker label="Branch" value={branchFilter} onChange={setBranchFilter} items={branches.map((b) => ({ id: b.id, label: b.name }))} />}
+      {needsClass && <Picker label="Class" value={classFilter} onChange={setClassFilter} items={classes.map((c) => ({ id: c.id, label: c.name }))} />}
     </div>
   );
 }
@@ -642,61 +653,48 @@ function Picker({ label, value, onChange, items }: { label: string; value: strin
   );
 }
 
+// ── Columns ────────────────────────────────────────────────────────────────
+
 function getColumns(
-  tab: AcademicTab,
-  labels: {
-    courseName: Map<string, string>;
-    branchName: Map<string, string>;
-    yearName: Map<string, string>;
-    className: Map<string, string>;
-  },
+  endpoint: string,
+  labels: { courseName: Map<string, string>; branchName: Map<string, string>; yearName: Map<string, string>; className: Map<string, string> },
   _openEdit: (row: any) => void,
 ) {
   const status = (r: any) => <StatusBadge value={r.is_active ? "active" : "inactive"} />;
-  if (tab === "academic-years") {
-    return [
-      { key: "label", header: "Label", sortable: true, cell: (r: AcademicYear) => <span className="font-medium">{r.label}</span> },
-      { key: "start_date", header: "Start", cell: (r: AcademicYear) => r.start_date },
-      { key: "end_date", header: "End", cell: (r: AcademicYear) => r.end_date },
-      { key: "is_current", header: "Current", cell: (r: AcademicYear) => r.is_current ? "Yes" : "No" },
-      { key: "is_active", header: "Status", cell: status },
-    ];
-  }
-  if (tab === "courses") {
-    return [
-      { key: "name", header: "Name", cell: (r: Course) => <span className="font-medium">{r.name}</span> },
-      { key: "code", header: "Code", cell: (r: Course) => <span className="font-mono text-xs">{r.code}</span> },
-      { key: "level", header: "Level", cell: (r: Course) => r.level },
-      { key: "duration_years", header: "Duration", cell: (r: Course) => `${r.duration_years} years` },
-      { key: "is_active", header: "Status", cell: status },
-    ];
-  }
-  if (tab === "branches") {
-    return [
-      { key: "name", header: "Name", cell: (r: Branch) => <span className="font-medium">{r.name}</span> },
-      { key: "code", header: "Code", cell: (r: Branch) => <span className="font-mono text-xs">{r.code}</span> },
-      { key: "course_id", header: "Course", cell: (r: Branch) => labels.courseName.get(r.course_id) || "-" },
-      { key: "is_active", header: "Status", cell: status },
-    ];
-  }
-  if (tab === "subjects") {
-    return [
-      { key: "name", header: "Name", cell: (r: Subject) => <span className="font-medium">{r.name}</span> },
-      { key: "code", header: "Code", cell: (r: Subject) => <span className="font-mono text-xs">{r.code}</span> },
-      { key: "branch_id", header: "Branch", cell: (r: Subject) => labels.branchName.get(r.branch_id) || "-" },
-      { key: "academic_year_id", header: "Year", cell: (r: Subject) => labels.yearName.get(r.academic_year_id) || "-" },
-      { key: "credits", header: "Credits", cell: (r: Subject) => r.credits },
-      { key: "is_active", header: "Status", cell: status },
-    ];
-  }
-  if (tab === "classes") {
-    return [
-      { key: "name", header: "Name", cell: (r: ClassRow) => <span className="font-medium">{r.name}</span> },
-      { key: "branch_id", header: "Branch", cell: (r: ClassRow) => labels.branchName.get(r.branch_id) || "-" },
-      { key: "academic_year_id", header: "Year", cell: (r: ClassRow) => labels.yearName.get(r.academic_year_id) || "-" },
-      { key: "semester", header: "Semester", cell: (r: ClassRow) => r.semester },
-    ];
-  }
+  if (endpoint === "academic-years") return [
+    { key: "label", header: "Label", sortable: true, cell: (r: AcademicYear) => <span className="font-medium">{r.label}</span> },
+    { key: "start_date", header: "Start", cell: (r: AcademicYear) => r.start_date },
+    { key: "end_date", header: "End", cell: (r: AcademicYear) => r.end_date },
+    { key: "is_current", header: "Current", cell: (r: AcademicYear) => r.is_current ? "Yes" : "No" },
+    { key: "is_active", header: "Status", cell: status },
+  ];
+  if (endpoint === "courses") return [
+    { key: "name", header: "Name", cell: (r: Course) => <span className="font-medium">{r.name}</span> },
+    { key: "code", header: "Code", cell: (r: Course) => <span className="font-mono text-xs">{r.code}</span> },
+    { key: "level", header: "Level", cell: (r: Course) => r.level },
+    { key: "duration_years", header: "Duration", cell: (r: Course) => `${r.duration_years} years` },
+    { key: "is_active", header: "Status", cell: status },
+  ];
+  if (endpoint === "branches") return [
+    { key: "name", header: "Name", cell: (r: Branch) => <span className="font-medium">{r.name}</span> },
+    { key: "code", header: "Code", cell: (r: Branch) => <span className="font-mono text-xs">{r.code}</span> },
+    { key: "course_id", header: "Course", cell: (r: Branch) => labels.courseName.get(r.course_id) || "-" },
+    { key: "is_active", header: "Status", cell: status },
+  ];
+  if (endpoint === "subjects") return [
+    { key: "name", header: "Name", cell: (r: Subject) => <span className="font-medium">{r.name}</span> },
+    { key: "code", header: "Code", cell: (r: Subject) => <span className="font-mono text-xs">{r.code}</span> },
+    { key: "branch_id", header: "Branch", cell: (r: Subject) => labels.branchName.get(r.branch_id) || "-" },
+    { key: "academic_year_id", header: "Year", cell: (r: Subject) => labels.yearName.get(r.academic_year_id) || "-" },
+    { key: "credits", header: "Credits", cell: (r: Subject) => r.credits },
+    { key: "is_active", header: "Status", cell: status },
+  ];
+  if (endpoint === "classes") return [
+    { key: "name", header: "Name", cell: (r: ClassRow) => <span className="font-medium">{r.name}</span> },
+    { key: "branch_id", header: "Branch", cell: (r: ClassRow) => labels.branchName.get(r.branch_id) || "-" },
+    { key: "academic_year_id", header: "Year", cell: (r: ClassRow) => labels.yearName.get(r.academic_year_id) || "-" },
+    { key: "semester", header: "Semester", cell: (r: ClassRow) => r.semester },
+  ];
   return [
     { key: "name", header: "Name", cell: (r: Section) => <span className="font-medium">{r.name}</span> },
     { key: "class_id", header: "Class", cell: (r: Section) => labels.className.get(r.class_id) || "-" },
@@ -704,18 +702,12 @@ function getColumns(
   ];
 }
 
+// ── Form ───────────────────────────────────────────────────────────────────
+
 function AcademicForm({
-  activeTab,
-  form,
-  setField,
-  institutions,
-  courses,
-  branches,
-  academicYears,
-  classes,
-  currentInstitutionLabel,
+  activeEndpoint, form, setField, institutions, courses, branches, academicYears, classes, currentInstitutionLabel,
 }: {
-  activeTab: AcademicTab;
+  activeEndpoint: string;
   form: Record<string, any>;
   setField: (key: string, value: any) => void;
   institutions: Institution[];
@@ -732,47 +724,34 @@ function AcademicForm({
         value={form.institution_id || ""}
         onChange={(v) => setField("institution_id", v)}
         items={(() => {
-          const items = institutions.map((institution) => ({ id: institution.id, label: institution.name }));
-          if (form.institution_id && !items.some((item) => item.id === form.institution_id)) {
+          const items = institutions.map((i) => ({ id: i.id, label: i.name }));
+          if (form.institution_id && !items.some((item) => item.id === form.institution_id))
             items.unshift({ id: form.institution_id, label: currentInstitutionLabel });
-          }
           return items;
         })()}
       />
-      {(activeTab === "branches") && (
+
+      {activeEndpoint === "branches" && (
         <SelectField label="Course" value={form.course_id || ""} onChange={(v) => setField("course_id", v)} items={courses.map((c) => ({ id: c.id, label: c.name }))} />
       )}
-      {(activeTab === "subjects" || activeTab === "classes") && (
+
+      {(activeEndpoint === "subjects" || activeEndpoint === "classes") && (
         <>
           <SelectField label="Branch" value={form.branch_id || ""} onChange={(v) => setField("branch_id", v)} items={branches.map((b) => ({ id: b.id, label: b.name }))} />
-          {activeTab === "subjects" ? (
-            <SelectField
-              label="Academic Year"
-              value={form.academic_year_id || "__none__"}
-              onChange={(v) => setField("academic_year_id", v === "__none__" ? "" : v)}
-              items={[
-                { id: "__none__", label: "All Years" },
-                ...academicYears.map((y) => ({ id: y.id, label: y.label })),
-              ]}
-            />
-          ) : (
-            <SelectField
-              label="Academic Year"
-              value={form.academic_year_id || "__none__"}
-              onChange={(v) => setField("academic_year_id", v === "__none__" ? "" : v)}
-              items={[
-                { id: "__none__", label: "All Years" },
-                ...academicYears.map((y) => ({ id: y.id, label: y.label })),
-              ]}
-            />
-          )}
+          <SelectField
+            label="Academic Year"
+            value={form.academic_year_id || "__none__"}
+            onChange={(v) => setField("academic_year_id", v === "__none__" ? "" : v)}
+            items={[{ id: "__none__", label: "All Years" }, ...academicYears.map((y) => ({ id: y.id, label: y.label }))]}
+          />
         </>
       )}
-      {activeTab === "sections" && (
+
+      {activeEndpoint === "sections" && (
         <SelectField label="Class" value={form.class_id || ""} onChange={(v) => setField("class_id", v)} items={classes.map((c) => ({ id: c.id, label: c.name }))} />
       )}
 
-      {(activeTab === "academic-years") && (
+      {activeEndpoint === "academic-years" && (
         <>
           <Field label="Label"><Input value={form.label || ""} onChange={(e) => setField("label", e.target.value)} placeholder="2026-27" /></Field>
           <Field label="Start Date"><Input type="date" value={form.start_date || ""} onChange={(e) => setField("start_date", e.target.value)} /></Field>
@@ -782,7 +761,7 @@ function AcademicForm({
         </>
       )}
 
-      {(activeTab === "courses") && (
+      {activeEndpoint === "courses" && (
         <>
           <Field label="Name"><Input value={form.name || ""} onChange={(e) => setField("name", e.target.value)} placeholder="Bachelor of Engineering" /></Field>
           <Field label="Code"><Input value={form.code || ""} onChange={(e) => setField("code", e.target.value)} placeholder="BE" /></Field>
@@ -792,25 +771,32 @@ function AcademicForm({
         </>
       )}
 
-      {(activeTab === "branches" || activeTab === "subjects" || activeTab === "classes" || activeTab === "sections") && (
-        <Field label="Name"><Input value={form.name || ""} onChange={(e) => setField("name", e.target.value)} placeholder={activeTab === "sections" ? "A" : "Name"} /></Field>
+      {["branches", "subjects", "classes", "sections"].includes(activeEndpoint) && (
+        <Field label="Name">
+          <Input value={form.name || ""} onChange={(e) => setField("name", e.target.value)} placeholder={activeEndpoint === "sections" ? "A" : "Name"} />
+        </Field>
       )}
-      {(activeTab === "branches" || activeTab === "subjects") && (
+
+      {(activeEndpoint === "branches" || activeEndpoint === "subjects") && (
         <Field label="Code"><Input value={form.code || ""} onChange={(e) => setField("code", e.target.value)} placeholder="CSE" /></Field>
       )}
-      {activeTab === "subjects" && (
+
+      {activeEndpoint === "subjects" && (
         <>
           <Field label="Credits"><Input type="number" value={form.credits ?? 0} onChange={(e) => setField("credits", e.target.value)} /></Field>
           <BooleanSelect label="Status" value={form.is_active || "true"} onChange={(v) => setField("is_active", v)} activeText="Active" inactiveText="Inactive" />
         </>
       )}
-      {activeTab === "branches" && (
+
+      {activeEndpoint === "branches" && (
         <BooleanSelect label="Status" value={form.is_active || "true"} onChange={(v) => setField("is_active", v)} activeText="Active" inactiveText="Inactive" />
       )}
-      {activeTab === "classes" && (
+
+      {activeEndpoint === "classes" && (
         <Field label="Semester"><Input type="number" value={form.semester ?? 1} onChange={(e) => setField("semester", e.target.value)} /></Field>
       )}
-      {activeTab === "sections" && (
+
+      {activeEndpoint === "sections" && (
         <Field label="Max Strength"><Input type="number" value={form.max_strength ?? 60} onChange={(e) => setField("max_strength", e.target.value)} /></Field>
       )}
     </FieldGrid>
