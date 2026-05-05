@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Plus, Save } from "lucide-react";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/services";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -47,7 +47,7 @@ interface Branch {
 interface Subject {
   id: string;
   branch_id: string;
-  academic_year_id: string;
+  academic_year_id: string | null;
   name: string;
   code: string;
   credits: number;
@@ -57,7 +57,7 @@ interface Subject {
 interface ClassRow {
   id: string;
   branch_id: string;
-  academic_year_id: string;
+  academic_year_id: string | null;
   name: string;
   semester: number;
 }
@@ -67,6 +67,14 @@ interface Section {
   class_id: string;
   name: string;
   max_strength: number;
+}
+
+interface Institution {
+  id: string;
+  org_id: string;
+  name: string;
+  code: string;
+  is_active: boolean;
 }
 
 const tabs: { value: AcademicTab; label: string }[] = [
@@ -132,12 +140,15 @@ function nextYear() {
 export function AcademicMastersPage({ initialTab = "academic-years" }: { initialTab?: AcademicTab }) {
   const { user } = useAuth();
   const institutionId = user?.institution_id || "";
+  const organizationId = user?.organization_id || "";
+  const [activeInstitutionId, setActiveInstitutionId] = useState(institutionId);
   const [activeTab, setActiveTab] = useState<AcademicTab>(initialTab);
   const [params, setParams] = useState<ListParams>({ page: 1, pageSize: 10, search: "" });
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<"create" | "edit" | null>(null);
   const [editing, setEditing] = useState<any>(null);
+  const [institutions, setInstitutions] = useState<Institution[]>([]);
 
   const [academicYears, setAcademicYears] = useState<Paginated<AcademicYear>>(emptyPage);
   const [courses, setCourses] = useState<Paginated<Course>>(emptyPage);
@@ -151,6 +162,10 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
   const [classFilter, setClassFilter] = useState("");
 
   const [form, setForm] = useState<Record<string, any>>({});
+  const [formAcademicYears, setFormAcademicYears] = useState<AcademicYear[]>([]);
+  const [formCourses, setFormCourses] = useState<Course[]>([]);
+  const [formBranches, setFormBranches] = useState<Branch[]>([]);
+  const [formClasses, setFormClasses] = useState<ClassRow[]>([]);
 
   const courseOptions = courses.data;
   const branchOptions = branches.data;
@@ -161,19 +176,89 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
   const branchName = useMemo(() => new Map(branchOptions.map((b) => [b.id, b.name])), [branchOptions]);
   const yearName = useMemo(() => new Map(yearOptions.map((y) => [y.id, y.label])), [yearOptions]);
   const className = useMemo(() => new Map(classOptions.map((c) => [c.id, c.name])), [classOptions]);
+  const branchToCourse = useMemo(() => new Map(branchOptions.map((b) => [b.id, b.course_id])), [branchOptions]);
+  const classToBranch = useMemo(() => new Map(classOptions.map((c) => [c.id, c.branch_id])), [classOptions]);
+  const currentInstitution = useMemo(
+    () => institutions.find((item) => item.id === activeInstitutionId) || null,
+    [institutions, activeInstitutionId],
+  );
+
+  const deriveInstitutionId = (row: any) => {
+    if (row?.institution_id) return row.institution_id as string;
+    if (row?.course_id) {
+      return courseOptions.find((course) => course.id === row.course_id)?.institution_id || activeInstitutionId || institutionId;
+    }
+    if (row?.branch_id) {
+      const courseId = branchToCourse.get(row.branch_id);
+      return courseOptions.find((course) => course.id === courseId)?.institution_id || activeInstitutionId || institutionId;
+    }
+    if (row?.class_id) {
+      const branchId = classToBranch.get(row.class_id);
+      const courseId = branchId ? branchToCourse.get(branchId) : "";
+      return courseOptions.find((course) => course.id === courseId)?.institution_id || activeInstitutionId || institutionId;
+    }
+    return activeInstitutionId || institutionId;
+  };
+
+  const loadInstitutions = async () => {
+    if (!organizationId) {
+      if (institutionId) {
+        setInstitutions([
+          {
+            id: institutionId,
+            org_id: "",
+            name: "Current Institution",
+            code: "",
+            is_active: true,
+          },
+        ]);
+      } else {
+        setInstitutions([]);
+      }
+      return;
+    }
+
+    try {
+      const res = await api.get<any>(`/institutions?org_id=${organizationId}&page=1&page_size=100`);
+      const rows = ((Array.isArray(res?.data?.items) && res.data.items) || []) as Institution[];
+      const activeRows = rows.filter((item) => item.is_active !== false);
+      setInstitutions(activeRows);
+      if (!activeRows.some((item) => item.id === activeInstitutionId)) {
+        setActiveInstitutionId(activeRows[0]?.id || "");
+      }
+    } catch {
+      if (institutionId) {
+        setInstitutions([
+          {
+            id: institutionId,
+            org_id: organizationId,
+            name: "Current Institution",
+            code: "",
+            is_active: true,
+          },
+        ]);
+        if (!activeInstitutionId) setActiveInstitutionId(institutionId);
+      } else {
+        setInstitutions([]);
+        setActiveInstitutionId("");
+      }
+    }
+  };
 
   const loadAcademicYears = async () => {
-    if (!institutionId) return;
-    const res = await api.get<any>(`/academic-years?institution_id=${institutionId}&page=1&page_size=100`);
+    if (!activeInstitutionId) return;
+    const res = await api.get<any>(`/academic-years?institution_id=${activeInstitutionId}&page=1&page_size=100`);
     setAcademicYears(pageOf<AcademicYear>(res));
   };
 
   const loadCourses = async () => {
-    if (!institutionId) return;
-    const res = await api.get<any>(`/courses?institution_id=${institutionId}&page=1&page_size=100`);
+    if (!activeInstitutionId) return;
+    const res = await api.get<any>(`/courses?institution_id=${activeInstitutionId}&page=1&page_size=100`);
     const page = pageOf<Course>(res);
     setCourses(page);
-    if (!courseFilter && page.data.length) setCourseFilter(page.data[0].id);
+    if (!page.data.some((course) => course.id === courseFilter)) {
+      setCourseFilter(page.data[0]?.id || "");
+    }
   };
 
   const loadBranches = async (courseId = courseFilter) => {
@@ -223,6 +308,7 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
   const loadAll = async () => {
     setLoading(true);
     try {
+      await loadInstitutions();
       await loadAcademicYears();
       await loadCourses();
     } catch (error: any) {
@@ -233,8 +319,12 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
   };
 
   useEffect(() => {
+    if (institutionId && !activeInstitutionId) setActiveInstitutionId(institutionId);
+  }, [institutionId, activeInstitutionId]);
+
+  useEffect(() => {
     loadAll();
-  }, [institutionId]);
+  }, [activeInstitutionId, organizationId]);
 
   useEffect(() => {
     if (courseFilter) loadBranches(courseFilter).catch(() => {});
@@ -251,23 +341,70 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
     if (classFilter) loadSections(classFilter).catch(() => {});
   }, [classFilter]);
 
+  useEffect(() => {
+    if (!mode) return;
+    const nextInstitutionId = form.institution_id || activeInstitutionId || institutionId;
+    if (!nextInstitutionId) return;
+
+    const loadFormOptions = async () => {
+      try {
+        const yearsRes = await api.get<any>(`/academic-years?institution_id=${nextInstitutionId}&page=1&page_size=100`);
+        const nextYears = rowsOf<AcademicYear>(yearsRes);
+        setFormAcademicYears(nextYears);
+
+        const coursesRes = await api.get<any>(`/courses?institution_id=${nextInstitutionId}&page=1&page_size=100`);
+        const nextCourses = rowsOf<Course>(coursesRes);
+        setFormCourses(nextCourses);
+
+        const branchResponses = await Promise.all(
+          nextCourses.map((course) =>
+            api.get<any>(`/branches?course_id=${course.id}&page=1&page_size=100`).catch(() => ({ data: { items: [] } })),
+          ),
+        );
+        const nextBranches = branchResponses.flatMap((res) => rowsOf<Branch>(res));
+        setFormBranches(nextBranches);
+
+        const classResponses = await Promise.all(
+          nextBranches.map((branch) =>
+            api.get<any>(`/classes?branch_id=${branch.id}&page=1&page_size=100`).catch(() => ({ data: { items: [] } })),
+          ),
+        );
+        const nextClasses = classResponses.flatMap((res) => rowsOf<ClassRow>(res));
+        setFormClasses(nextClasses);
+
+        setForm((prev) => ({
+          ...prev,
+          institution_id: nextInstitutionId,
+          course_id: nextCourses.some((course) => course.id === prev.course_id) ? prev.course_id : nextCourses[0]?.id || "",
+          branch_id: nextBranches.some((branch) => branch.id === prev.branch_id) ? prev.branch_id : nextBranches[0]?.id || "",
+          academic_year_id: nextYears.some((year) => year.id === prev.academic_year_id) ? prev.academic_year_id : nextYears[0]?.id || "",
+          class_id: nextClasses.some((row) => row.id === prev.class_id) ? prev.class_id : nextClasses[0]?.id || "",
+        }));
+      } catch (error: any) {
+        toast.error(error?.message || "Unable to load institution data");
+      }
+    };
+
+    loadFormOptions();
+  }, [mode, form.institution_id, activeInstitutionId, institutionId]);
+
   const setField = (key: string, value: any) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const openCreate = () => {
     setEditing(null);
     setMode("create");
     if (activeTab === "academic-years") {
-      setForm({ label: "", start_date: today(), end_date: nextYear(), is_current: "false", is_active: "true" });
+      setForm({ institution_id: activeInstitutionId || institutionId, label: "", start_date: today(), end_date: nextYear(), is_current: "false", is_active: "true" });
     } else if (activeTab === "courses") {
-      setForm({ name: "", code: "", level: "UG", duration_years: 4, is_active: "true" });
+      setForm({ institution_id: activeInstitutionId || institutionId, name: "", code: "", level: "UG", duration_years: 4, is_active: "true" });
     } else if (activeTab === "branches") {
-      setForm({ course_id: courseFilter, name: "", code: "", is_active: "true" });
+      setForm({ institution_id: activeInstitutionId || institutionId, course_id: courseFilter, name: "", code: "", is_active: "true" });
     } else if (activeTab === "subjects") {
-      setForm({ branch_id: branchFilter, academic_year_id: yearOptions[0]?.id || "", name: "", code: "", credits: 0, is_active: "true" });
+      setForm({ institution_id: activeInstitutionId || institutionId, branch_id: branchFilter, academic_year_id: "", name: "", code: "", credits: 0, is_active: "true" });
     } else if (activeTab === "classes") {
-      setForm({ branch_id: branchFilter, academic_year_id: yearOptions[0]?.id || "", name: "", semester: 1 });
+      setForm({ institution_id: activeInstitutionId || institutionId, branch_id: branchFilter, academic_year_id: "", name: "", semester: 1 });
     } else {
-      setForm({ class_id: classFilter, name: "", max_strength: 60 });
+      setForm({ institution_id: activeInstitutionId || institutionId, class_id: classFilter, name: "", max_strength: 60 });
     }
   };
 
@@ -275,11 +412,11 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
     setEditing(row);
     setMode("edit");
     if (activeTab === "academic-years") {
-      setForm({ ...row, is_current: row.is_current ? "true" : "false", is_active: row.is_active ? "true" : "false" });
+      setForm({ ...row, institution_id: deriveInstitutionId(row), is_current: row.is_current ? "true" : "false", is_active: row.is_active ? "true" : "false" });
     } else if (activeTab === "courses" || activeTab === "branches" || activeTab === "subjects") {
-      setForm({ ...row, is_active: row.is_active ? "true" : "false" });
+      setForm({ ...row, institution_id: deriveInstitutionId(row), is_active: row.is_active ? "true" : "false" });
     } else {
-      setForm({ ...row });
+      setForm({ ...row, institution_id: deriveInstitutionId(row) });
     }
   };
 
@@ -293,12 +430,12 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
   };
 
   const save = async () => {
-    if (!institutionId) return;
+    if (!form.institution_id) return;
     setBusy(true);
     try {
       if (activeTab === "academic-years") {
         const payload = {
-          institution_id: institutionId,
+          institution_id: form.institution_id,
           label: form.label,
           start_date: form.start_date,
           end_date: form.end_date,
@@ -309,7 +446,7 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
         else await api.post("/academic-years", payload);
       } else if (activeTab === "courses") {
         const payload = {
-          institution_id: institutionId,
+          institution_id: form.institution_id,
           name: form.name,
           code: form.code,
           level: form.level,
@@ -330,7 +467,7 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
       } else if (activeTab === "subjects") {
         const payload = {
           branch_id: form.branch_id,
-          academic_year_id: form.academic_year_id,
+          academic_year_id: form.academic_year_id || null,
           name: form.name,
           code: form.code,
           credits: Number(form.credits),
@@ -341,7 +478,7 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
       } else if (activeTab === "classes") {
         const payload = {
           branch_id: form.branch_id,
-          academic_year_id: form.academic_year_id,
+          academic_year_id: form.academic_year_id || null,
           name: form.name,
           semester: Number(form.semester),
         };
@@ -380,7 +517,7 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
       <PageHeader
         title="Academic Masters"
         description="Configure academic years, courses, branches, subjects, classes and sections."
-        actions={<Button onClick={openCreate} disabled={!institutionId}><Plus className="mr-2 h-4 w-4" /> New</Button>}
+        actions={<Button onClick={openCreate} disabled={!activeInstitutionId}><Plus className="mr-2 h-4 w-4" /> New</Button>}
       />
 
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as AcademicTab); setParams({ page: 1, pageSize: 10, search: "" }); }}>
@@ -391,12 +528,21 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
 
       <Filters
         activeTab={activeTab}
+        institutions={institutions}
         courses={courseOptions}
         branches={branchOptions}
         classes={classOptions}
+        activeInstitutionId={activeInstitutionId}
         courseFilter={courseFilter}
         branchFilter={branchFilter}
         classFilter={classFilter}
+        setActiveInstitutionId={(value) => {
+          setActiveInstitutionId(value);
+          setCourseFilter("");
+          setBranchFilter("");
+          setClassFilter("");
+          setParams((prev) => ({ ...prev, page: 1 }));
+        }}
         setCourseFilter={setCourseFilter}
         setBranchFilter={setBranchFilter}
         setClassFilter={setClassFilter}
@@ -425,10 +571,12 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
           activeTab={activeTab}
           form={form}
           setField={setField}
-          courses={courseOptions}
-          branches={branchOptions}
-          academicYears={yearOptions}
-          classes={classOptions}
+          institutions={institutions}
+          courses={formCourses}
+          branches={formBranches}
+          academicYears={formAcademicYears}
+          classes={formClasses}
+          currentInstitutionLabel={currentInstitution?.name || "Current Institution"}
         />
       </FormModal>
     </div>
@@ -437,31 +585,36 @@ export function AcademicMastersPage({ initialTab = "academic-years" }: { initial
 
 function Filters({
   activeTab,
+  institutions,
   courses,
   branches,
   classes,
+  activeInstitutionId,
   courseFilter,
   branchFilter,
   classFilter,
+  setActiveInstitutionId,
   setCourseFilter,
   setBranchFilter,
   setClassFilter,
 }: {
   activeTab: AcademicTab;
+  institutions: Institution[];
   courses: Course[];
   branches: Branch[];
   classes: ClassRow[];
+  activeInstitutionId: string;
   courseFilter: string;
   branchFilter: string;
   classFilter: string;
+  setActiveInstitutionId: (v: string) => void;
   setCourseFilter: (v: string) => void;
   setBranchFilter: (v: string) => void;
   setClassFilter: (v: string) => void;
 }) {
-  if (activeTab === "academic-years" || activeTab === "courses") return null;
-
   return (
     <div className="mb-4 flex flex-wrap gap-3 rounded-lg border border-border bg-card p-3">
+      <Picker label="Institution" value={activeInstitutionId} onChange={setActiveInstitutionId} items={institutions.map((i) => ({ id: i.id, label: i.name }))} />
       {(activeTab === "branches" || activeTab === "subjects" || activeTab === "classes" || activeTab === "sections") && (
         <Picker label="Course" value={courseFilter} onChange={setCourseFilter} items={courses.map((c) => ({ id: c.id, label: c.name }))} />
       )}
@@ -555,28 +708,64 @@ function AcademicForm({
   activeTab,
   form,
   setField,
+  institutions,
   courses,
   branches,
   academicYears,
   classes,
+  currentInstitutionLabel,
 }: {
   activeTab: AcademicTab;
   form: Record<string, any>;
   setField: (key: string, value: any) => void;
+  institutions: Institution[];
   courses: Course[];
   branches: Branch[];
   academicYears: AcademicYear[];
   classes: ClassRow[];
+  currentInstitutionLabel: string;
 }) {
   return (
     <FieldGrid>
+      <SelectField
+        label="Institution"
+        value={form.institution_id || ""}
+        onChange={(v) => setField("institution_id", v)}
+        items={(() => {
+          const items = institutions.map((institution) => ({ id: institution.id, label: institution.name }));
+          if (form.institution_id && !items.some((item) => item.id === form.institution_id)) {
+            items.unshift({ id: form.institution_id, label: currentInstitutionLabel });
+          }
+          return items;
+        })()}
+      />
       {(activeTab === "branches") && (
         <SelectField label="Course" value={form.course_id || ""} onChange={(v) => setField("course_id", v)} items={courses.map((c) => ({ id: c.id, label: c.name }))} />
       )}
       {(activeTab === "subjects" || activeTab === "classes") && (
         <>
           <SelectField label="Branch" value={form.branch_id || ""} onChange={(v) => setField("branch_id", v)} items={branches.map((b) => ({ id: b.id, label: b.name }))} />
-          <SelectField label="Academic Year" value={form.academic_year_id || ""} onChange={(v) => setField("academic_year_id", v)} items={academicYears.map((y) => ({ id: y.id, label: y.label }))} />
+          {activeTab === "subjects" ? (
+            <SelectField
+              label="Academic Year"
+              value={form.academic_year_id || "__none__"}
+              onChange={(v) => setField("academic_year_id", v === "__none__" ? "" : v)}
+              items={[
+                { id: "__none__", label: "All Years" },
+                ...academicYears.map((y) => ({ id: y.id, label: y.label })),
+              ]}
+            />
+          ) : (
+            <SelectField
+              label="Academic Year"
+              value={form.academic_year_id || "__none__"}
+              onChange={(v) => setField("academic_year_id", v === "__none__" ? "" : v)}
+              items={[
+                { id: "__none__", label: "All Years" },
+                ...academicYears.map((y) => ({ id: y.id, label: y.label })),
+              ]}
+            />
+          )}
         </>
       )}
       {activeTab === "sections" && (
