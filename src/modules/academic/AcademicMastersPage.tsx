@@ -88,44 +88,82 @@ interface Institution {
 }
 
 interface TabMeta {
-  value: string;   // slug used as tab key, e.g. "courses"
-  label: string;   // display label from API, e.g. "Courses"
+  value: string;          // slug used as tab key, e.g. "acc" or "courses"
+  label: string;          // display label from API, e.g. "Academic Years"
   route: string | null;
-  apiResource: string; // REST resource name, e.g. "courses"
-}
-
-/**
- * Derive a stable tab slug and REST resource purely from the menu item.
- * - Tab value  = last path segment of the route, lowercased
- *   e.g.  "/academic/courses" → "courses"
- *         "/academic/ACC"     → "acc"
- * - apiResource = same value (the backend route segment IS the resource name).
- *   Exception: if the segment doesn't match any known resource we keep it as-is;
- *   the save/load logic handles the mapping.
- */
-function buildTabMeta(item: MenuItem): TabMeta {
-  let value = item.label.toLowerCase().replace(/\s+/g, "-");
-  let apiResource = value;
-
-  if (item.route) {
-    const segment = item.route.split("/").filter(Boolean).pop()?.toLowerCase() || "";
-    if (segment) {
-      value = segment;
-      apiResource = segment;
-    }
-  }
-
-  return { value, label: item.label, route: item.route, apiResource };
+  apiResource: string;    // raw route segment, e.g. "acc"
+  resolvedEndpoint: string; // resolved REST resource, e.g. "academic-years"
 }
 
 /**
  * Map a raw route-segment / apiResource to the actual REST endpoint name.
  * This is the ONLY place we handle oddities like "acc" → "academic-years".
- * Everything else is passed through as-is.
  */
 function resolveEndpoint(apiResource: string): string {
-  if (apiResource === "acc") return "academic-years";
   return apiResource;
+}
+
+/**
+ * Derive a stable tab slug and REST resource purely from the menu item.
+ * - Tab value         = last path segment of the route, lowercased
+ * - apiResource       = same raw segment
+ * - resolvedEndpoint  = mapped endpoint (e.g. "acc" → "academic-years")
+ *
+ * The resolvedEndpoint is stored so that initialTab matching can work
+ * whether the caller passes "acc", "academic-years", or the label slug.
+ */
+// function buildTabMeta(item: MenuItem): TabMeta {
+//   // Fallback: label-based slug, e.g. "Academic Years" → "academic-years"
+//   const labelSlug = item.label.toLowerCase().replace(/\s+/g, "-");
+
+//   let value = labelSlug;
+//   let apiResource = labelSlug;
+
+//   if (item.route) {
+//     const segment = item.route.split("/").filter(Boolean).pop()?.toLowerCase() || "";
+//     if (segment) {
+//       value = segment;
+//       apiResource = segment;
+//     }
+//   }
+
+//   const resolvedEndpoint = resolveEndpoint(apiResource);
+
+//   return { value, label: item.label, route: item.route, apiResource, resolvedEndpoint };
+// }
+
+function buildTabMeta(item: MenuItem): TabMeta {
+  const segment =
+    item.route
+      ?.split("/")
+      .filter(Boolean)
+      .pop()
+      ?.toLowerCase() || "";
+
+  return {
+    value: segment,
+    label: item.label,
+    route: item.route,
+    apiResource: segment,
+    resolvedEndpoint: segment,
+  };
+}
+
+/**
+ * Find the best matching tab for a given initialTab string.
+ * Matches against:
+ *  1. tab.value           — exact route segment ("acc")
+ *  2. tab.resolvedEndpoint — resolved resource name ("academic-years")
+ *  3. label slug          — label-derived slug ("academic-years" from "Academic Years")
+ */
+function matchInitialTab(tabs: TabMeta[], initialTab: string | undefined): TabMeta | undefined {
+  if (!initialTab) return undefined;
+  const q = initialTab.toLowerCase();
+  return (
+    tabs.find((t) => t.value === q) ||
+    tabs.find((t) => t.resolvedEndpoint === q) ||
+    tabs.find((t) => t.label.toLowerCase().replace(/\s+/g, "-") === q)
+  );
 }
 
 const emptyPage = <T,>(): Paginated<T> => ({ data: [], total: 0, page: 1, pageSize: 10 });
@@ -189,6 +227,7 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
   const [tabs, setTabs] = useState<TabMeta[]>([]);
   const [tabsLoading, setTabsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<AcademicTab>("");
+  
 
   useEffect(() => {
     (async () => {
@@ -209,11 +248,10 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
           const sorted = [...academicMenu.children].sort((a, b) => a.order_no - b.order_no);
           const dynamicTabs = sorted.map(buildTabMeta);
           setTabs(dynamicTabs);
-          setActiveTab(
-            initialTab && dynamicTabs.some((t) => t.value === initialTab)
-              ? initialTab
-              : dynamicTabs[0].value
-          );
+
+          // FIX: match initialTab against value, resolvedEndpoint, or label slug
+          const matched = matchInitialTab(dynamicTabs, initialTab);
+          setActiveTab(matched ? matched.value : dynamicTabs[0].value);
         }
       } catch (err: any) {
         toast.error(err?.message || "Failed to load navigation menus");
@@ -244,17 +282,19 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
   const [formBranches, setFormBranches] = useState<Branch[]>([]);
   const [formClasses, setFormClasses] = useState<ClassRow[]>([]);
 
-  // Active tab metadata + resolved endpoint
+  // Active tab metadata — now uses resolvedEndpoint for all data lookups
   const activeTabMeta = useMemo(() => tabs.find((t) => t.value === activeTab), [tabs, activeTab]);
+
+  // FIX: use resolvedEndpoint from TabMeta instead of re-resolving manually
   const activeEndpoint = useMemo(
-    () => resolveEndpoint(activeTabMeta?.apiResource || ""),
+    () => activeTabMeta?.resolvedEndpoint || "",
     [activeTabMeta]
   );
 
   // Resolved endpoints for each resource type — derived from tabs
   const endpointOf = useMemo(() => {
     const map: Record<string, string> = {};
-    tabs.forEach((t) => { map[t.apiResource] = resolveEndpoint(t.apiResource); });
+    tabs.forEach((t) => { map[t.apiResource] = t.resolvedEndpoint; });
     return map;
   }, [tabs]);
 
@@ -542,10 +582,19 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
         }
       />
 
-      <Tabs
-        value={activeTab}
-        onValueChange={(v) => { setActiveTab(v as AcademicTab); setParams({ page: 1, pageSize: 10, search: "" }); }}
-      >
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => {
+           window.history.replaceState({}, "", `/academic/${v}`);
+            setActiveTab(v as AcademicTab);
+
+            setParams({
+              page: 1,
+              pageSize: 10,
+              search: "",
+            });
+          }}
+        >
         <TabsList className="mb-4 flex h-auto flex-wrap justify-start">
           {tabs.map((tab) => (
             <TabsTrigger key={tab.value} value={tab.value}>{tab.label}</TabsTrigger>
