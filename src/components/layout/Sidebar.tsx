@@ -68,13 +68,17 @@ export function Sidebar() {
     )}>
       <div className="h-16 flex items-center justify-between px-4 border-b border-sidebar-border">
         <Link to="/dashboard" className="flex items-center gap-2 overflow-hidden">
-          <div className="h-9 w-9 rounded-xl grid place-items-center" style={{ background: "var(--gradient-emerald)" }}>
-            <GraduationCap className="h-5 w-5 text-[oklch(0.18_0.02_160)]" />
-          </div>
+        <div className="h-9 w-9 rounded-xl overflow-hidden">
+          <img 
+            src="https://thumbs.dreamstime.com/b/school-costom-logo-design-d-436103786.jpg"
+            alt="logo"
+            className="h-full w-full object-cover"
+          />
+        </div>
           {!sidebarCollapsed && (
             <div className="leading-tight">
-              <p className="text-sm font-semibold">Scholaris</p>
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Admin</p>
+              <p className="text-sm font-semibold gold" style={{ color: "var(--gold)" }}>Scholaris</p>
+              <p className="text-[10px] uppercase tracking-widest text-muted">Admin</p>
             </div>
           )}
         </Link>

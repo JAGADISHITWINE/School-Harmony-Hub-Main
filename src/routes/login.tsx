@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zResolver } from "@/modules/zodResolver";
-import { Eye, EyeOff, GraduationCap, Loader2 } from "lucide-react";
+import { Eye, EyeOff, GraduationCap, Loader2, BookOpen, Users, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,17 +36,13 @@ function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // ✅ Read from localStorage safely
   const rememberedEmail =
     typeof window !== "undefined" ? localStorage.getItem(REMEMBER_EMAIL_KEY) || "" : "";
-
   const rememberedPassword =
     typeof window !== "undefined" ? localStorage.getItem(REMEMBER_PASSWORD_KEY) || "" : "";
-
   const rememberedMe =
     typeof window !== "undefined" ? localStorage.getItem(REMEMBER_ME_KEY) === "true" : false;
 
-  // ✅ Initialize checkbox properly
   const [rememberMe, setRememberMe] = useState(rememberedMe);
 
   const {
@@ -55,22 +51,15 @@ function LoginPage() {
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zResolver(schema),
-    defaultValues: {
-      email: rememberedEmail,
-      password: rememberedPassword,
-    },
+    defaultValues: { email: rememberedEmail, password: rememberedPassword },
   });
 
   const onSubmit = async (v: FormValues) => {
     setSubmitting(true);
     try {
       await login(v.email, v.password);
+      try { await api.get(MENUS_ME_ENDPOINT); } catch {}
 
-      try {
-        await api.get(MENUS_ME_ENDPOINT);
-      } catch {}
-
-      // ✅ Handle remember me correctly
       if (rememberMe) {
         localStorage.setItem(REMEMBER_EMAIL_KEY, v.email);
         localStorage.setItem(REMEMBER_PASSWORD_KEY, v.password);
@@ -83,7 +72,7 @@ function LoginPage() {
 
       toast.success("Welcome back");
       navigate({ to: "/dashboard" });
-    } catch (err) {
+    } catch {
       toast.error("Login failed");
     } finally {
       setSubmitting(false);
@@ -91,54 +80,86 @@ function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2 bg-background text-foreground">
-      <div className="hidden lg:flex flex-col justify-between p-12 relative overflow-hidden border-r border-border">
-        <div
-          className="absolute inset-0 opacity-30"
-          style={{
-            background:
-              "radial-gradient(800px circle at 20% 20%, oklch(0.74 0.16 162 / 0.25), transparent 50%), radial-gradient(600px circle at 80% 80%, oklch(0.6 0.14 200 / 0.2), transparent 60%)",
-          }}
-        />
+    <div className="min-h-screen grid lg:grid-cols-2">
 
-        <div className="relative flex items-center gap-3">
-          <div
-            className="h-11 w-11 rounded-xl grid place-items-center"
-            style={{ background: "var(--gradient-emerald)" }}
-          >
-            <GraduationCap className="h-6 w-6 text-[oklch(0.18_0.02_160)]" />
+      {/* ═══════════════════════════════════════
+          LEFT PANEL — dark navy brand side
+      ═══════════════════════════════════════ */}
+      <div className="login-left hidden lg:flex flex-col justify-between p-12">
+
+        {/* Logo */}
+        <div className="relative flex items-center gap-3 z-10">
+          <div className="login-logo-mark h-11 w-11 rounded-xl grid place-items-center">
+            <GraduationCap className="h-6 w-6" />
           </div>
           <div>
-            <p className="text-lg font-semibold">Scholaris</p>
-            <p className="text-xs uppercase tracking-widest text-muted-foreground">
-              School Admin Suite
-            </p>
+            <p className="login-brand-name text-lg">Scholaris</p>
+            <p className="login-brand-sub">School Admin Suite</p>
           </div>
         </div>
 
-        <div className="relative">
-          <h2 className="text-3xl font-semibold leading-tight max-w-md">
-            Manage your campus with one calm, focused workspace.
+        {/* Main copy */}
+        <div className="relative z-10 space-y-5">
+          <h2 className="login-heading">
+            Manage your campus with one{" "}
+            <em className="gold">calm, focused</em>{" "}
+            workspace.
           </h2>
-          <p className="mt-3 text-sm text-muted-foreground max-w-sm">
-            Students, staff, classes, attendance, fees and broadcasts — all behind one role-based dashboard.
+          <p className="login-subtext">
+            Students, staff, classes, attendance, fees and broadcasts —
+            all behind one role-based dashboard.
           </p>
+
+          {/* Feature pills */}
+          <div className="flex flex-wrap gap-2 pt-2">
+            <span className="login-feature-pill">
+              <span className="pill-dot" />
+              <Users size={13} />
+              Role-based access
+            </span>
+            <span className="login-feature-pill">
+              <span className="pill-dot" />
+              <BookOpen size={13} />
+              Class management
+            </span>
+            <span className="login-feature-pill">
+              <span className="pill-dot" />
+              <BarChart3 size={13} />
+              Live analytics
+            </span>
+          </div>
         </div>
 
-        <p className="relative text-xs text-muted-foreground">© Scholaris 2025</p>
+        {/* Footer */}
+        <p className="login-copyright relative z-10">© Scholaris 2025</p>
       </div>
 
-      <div className="flex items-center justify-center p-6 sm:p-12">
-        <Card className="w-full max-w-md p-8 bg-card border-border">
+      {/* ═══════════════════════════════════════
+          RIGHT PANEL — clean light form side
+      ═══════════════════════════════════════ */}
+      <div className="login-right p-6 sm:p-12">
+        <Card className="login-card w-full max-w-md p-8">
+
+          {/* Mobile logo (shown only when left panel is hidden) */}
+          <div className="flex items-center gap-2 mb-6 lg:hidden">
+            <div
+              className="h-8 w-8 rounded-lg grid place-items-center"
+              style={{ background: "var(--gradient-gold)" }}
+            >
+              <GraduationCap className="h-4 w-4 text-[oklch(0.12_0.03_260)]" />
+            </div>
+            <span className="font-semibold text-sm tracking-tight">Scholaris</span>
+          </div>
+
           <h1 className="text-2xl font-semibold">Sign in</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-sm mt-1">
             Use your admin credentials to continue.
           </p>
 
           <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4">
             <div className="space-y-1.5">
               <Label>Email</Label>
-              <Input type="email" {...register("email")} />
+              <Input type="email" placeholder="you@school.edu" {...register("email")} />
               {errors.email && (
                 <p className="text-xs text-destructive">{errors.email.message}</p>
               )}
@@ -149,6 +170,7 @@ function LoginPage() {
               <div className="relative">
                 <Input
                   type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
                   {...register("password")}
                   className="pr-10"
                 />
@@ -157,7 +179,7 @@ function LoginPage() {
                   onClick={() => setShowPassword((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2"
                 >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
               {errors.password && (
@@ -170,10 +192,10 @@ function LoginPage() {
                 checked={rememberMe}
                 onCheckedChange={(c) => setRememberMe(c === true)}
               />
-              <Label className="text-sm font-normal">Remember me</Label>
+              <Label className="text-sm font-normal cursor-pointer">Remember me</Label>
             </div>
 
-            <Button type="submit" className="w-full" disabled={submitting}>
+            <Button type="submit" className="w-full mt-2" disabled={submitting}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Sign in
             </Button>
