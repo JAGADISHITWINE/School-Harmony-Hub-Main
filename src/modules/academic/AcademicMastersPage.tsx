@@ -56,8 +56,11 @@ interface Branch {
 
 interface Subject {
   id: string;
-  branch_id: string;
+  course_id: string;
+  class_id: string;
+  branch_id: string | null;
   academic_year_id: string | null;
+  semester?: number | null;
   name: string;
   code: string;
   credits: number;
@@ -66,10 +69,13 @@ interface Subject {
 
 interface ClassRow {
   id: string;
-  branch_id: string;
+  course_id: string;
+  branch_id: string | null;
   academic_year_id: string | null;
   name: string;
-  semester: number;
+  year_no?: number | null;
+  semester?: number | null;
+  intake_capacity?: number;
 }
 
 interface Section {
@@ -100,7 +106,18 @@ interface TabMeta {
  * This is the ONLY place we handle oddities like "acc" → "academic-years".
  */
 function resolveEndpoint(apiResource: string): string {
-  return apiResource;
+  const key = (apiResource || "").toLowerCase().trim();
+  const map: Record<string, string> = {
+    acc: "academic-years",
+    "academic-year": "academic-years",
+    "academic-years": "academic-years",
+    courses: "courses",
+    branches: "branches",
+    subjects: "subjects",
+    classes: "classes",
+    sections: "sections",
+  };
+  return map[key] || key;
 }
 
 /**
@@ -145,7 +162,7 @@ function buildTabMeta(item: MenuItem): TabMeta {
     label: item.label,
     route: item.route,
     apiResource: segment,
-    resolvedEndpoint: segment,
+    resolvedEndpoint: resolveEndpoint(segment),
   };
 }
 
@@ -287,9 +304,20 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
 
   // FIX: use resolvedEndpoint from TabMeta instead of re-resolving manually
   const activeEndpoint = useMemo(
-    () => activeTabMeta?.resolvedEndpoint || "",
+    () =>
+      resolveEndpoint(
+        activeTabMeta?.resolvedEndpoint ||
+        activeTabMeta?.apiResource ||
+        activeTabMeta?.value ||
+        ""
+      ),
     [activeTabMeta]
   );
+  const effectiveEndpoint = useMemo(() => {
+    const byLabel = (activeTabMeta?.label || "").toLowerCase();
+    if (byLabel.includes("academic year")) return "academic-years";
+    return resolveEndpoint(activeEndpoint);
+  }, [activeEndpoint, activeTabMeta?.label]);
 
   // Resolved endpoints for each resource type — derived from tabs
   const endpointOf = useMemo(() => {
@@ -356,13 +384,9 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
   // ── Loaders ───────────────────────────────────────────────────────────────
 
   const loadInstitutions = async () => {
-    if (!organizationId) {
-      setInstitutions(institutionId ? [{ id: institutionId, org_id: "", name: "Current Institution", code: "", is_active: true }] : []);
-      return;
-    }
     try {
-      const res = await api.get<any>(`/institutions?org_id=${organizationId}&page=1&page_size=100`);
-      const rows = (Array.isArray(res?.data?.items) ? res.data.items : []) as Institution[];
+      const res = await api.get<any>(`/institutions/my-scope`);
+      const rows = (Array.isArray(res?.data) ? res.data : Array.isArray(res?.data?.items) ? res.data.items : []) as Institution[];
       const active = rows.filter((r) => r.is_active !== false);
       setInstitutions(active);
       if (!active.some((r) => r.id === activeInstitutionId)) setActiveInstitutionId(active[0]?.id || "");
@@ -402,15 +426,18 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
     }
   };
 
-  const loadSubjects = async (branchId = branchFilter) => {
-    if (!branchId) { setEpData("subjects", emptyPage()); return; }
-    const page = await fetchEp("subjects", `branch_id=${branchId}`);
+  const loadSubjects = async (classId = classFilter) => {
+    if (!classId) { setEpData("subjects", emptyPage()); return; }
+    const page = await fetchEp("subjects", `class_id=${classId}`);
     if (page) setEpData("subjects", page);
   };
 
-  const loadClasses = async (branchId = branchFilter) => {
-    if (!branchId) { setEpData(epClasses, emptyPage()); return; }
-    const page = await fetchEp(epClasses, `branch_id=${branchId}`);
+  const loadClasses = async (courseId = courseFilter) => {
+    if (!courseId) { setEpData(epClasses, emptyPage()); return; }
+    const query = branchFilter
+      ? `course_id=${courseId}&branch_id=${branchFilter}`
+      : `course_id=${courseId}`;
+    const page = await fetchEp(epClasses, query);
     if (page) {
       setEpData(epClasses, page);
       if (!page.data.some((c: ClassRow) => c.id === classFilter)) setClassFilter(page.data[0]?.id || "");
@@ -439,13 +466,8 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
   useEffect(() => { if (institutionId && !activeInstitutionId) setActiveInstitutionId(institutionId); }, [institutionId]);
   useEffect(() => { loadAll(); }, [activeInstitutionId, organizationId]);
   useEffect(() => { if (courseFilter) loadBranches(courseFilter).catch(() => {}); }, [courseFilter]);
-  useEffect(() => {
-    if (branchFilter) {
-      loadSubjects(branchFilter).catch(() => {});
-      loadClasses(branchFilter).catch(() => {});
-    }
-  }, [branchFilter]);
-  useEffect(() => { if (classFilter) loadSections(classFilter).catch(() => {}); }, [classFilter]);
+  useEffect(() => { if (courseFilter) loadClasses(courseFilter).catch(() => {}); }, [courseFilter, branchFilter]);
+  useEffect(() => { if (classFilter) { loadSubjects(classFilter).catch(() => {}); loadSections(classFilter).catch(() => {}); } }, [classFilter]);
 
   // Form option loader
   useEffect(() => {
@@ -496,11 +518,11 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
     setEditing(null);
     setMode("create");
     const base = { institution_id: activeInstitutionId || institutionId };
-    if (activeEndpoint === "academic-years") setForm({ ...base, label: "", start_date: today(), end_date: nextYear(), is_current: "false", is_active: "true" });
-    else if (activeEndpoint === "courses") setForm({ ...base, name: "", code: "", level: "UG", duration_years: 4, is_active: "true" });
-    else if (activeEndpoint === "branches") setForm({ ...base, course_id: courseFilter, name: "", code: "", is_active: "true" });
-    else if (activeEndpoint === "subjects") setForm({ ...base, branch_id: branchFilter, academic_year_id: "", name: "", code: "", credits: 0, is_active: "true" });
-    else if (activeEndpoint === "classes") setForm({ ...base, branch_id: branchFilter, academic_year_id: "", name: "", semester: 1 });
+    if (effectiveEndpoint === "academic-years") setForm({ ...base, label: "", start_date: today(), end_date: nextYear(), is_current: "false", is_active: "true" });
+    else if (effectiveEndpoint === "courses") setForm({ ...base, name: "", code: "", level: "UG", duration_years: 4, is_active: "true" });
+    else if (effectiveEndpoint === "branches") setForm({ ...base, course_id: courseFilter, name: "", code: "", is_active: "true" });
+    else if (effectiveEndpoint === "subjects") setForm({ ...base, course_id: courseFilter, class_id: classFilter, branch_id: branchFilter || "", academic_year_id: "", semester: "", name: "", code: "", credits: 0, is_active: "true" });
+    else if (effectiveEndpoint === "classes") setForm({ ...base, course_id: courseFilter, branch_id: branchFilter || "", academic_year_id: "", name: "", year_no: 1, semester: "", intake_capacity: 60 });
     else setForm({ ...base, class_id: classFilter, name: "", max_strength: 60 });
   };
 
@@ -508,19 +530,19 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
     setEditing(row);
     setMode("edit");
     const base = { ...row, institution_id: deriveInstitutionId(row) };
-    if (["academic-years", "courses", "branches", "subjects"].includes(activeEndpoint)) {
-      setForm({ ...base, is_active: row.is_active ? "true" : "false", ...(activeEndpoint === "academic-years" ? { is_current: row.is_current ? "true" : "false" } : {}) });
+    if (["academic-years", "courses", "branches", "subjects"].includes(effectiveEndpoint)) {
+      setForm({ ...base, is_active: row.is_active ? "true" : "false", ...(effectiveEndpoint === "academic-years" ? { is_current: row.is_current ? "true" : "false" } : {}) });
     } else {
       setForm(base);
     }
   };
 
   const refreshActive = async () => {
-    if (activeEndpoint === "academic-years") await loadAcademicYears();
-    else if (activeEndpoint === "courses") await loadCourses();
-    else if (activeEndpoint === "branches") await loadBranches();
-    else if (activeEndpoint === "subjects") await loadSubjects();
-    else if (activeEndpoint === "classes") await loadClasses();
+    if (effectiveEndpoint === "academic-years") await loadAcademicYears();
+    else if (effectiveEndpoint === "courses") await loadCourses();
+    else if (effectiveEndpoint === "branches") await loadBranches();
+    else if (effectiveEndpoint === "subjects") await loadSubjects();
+    else if (effectiveEndpoint === "classes") await loadClasses();
     else await loadSections();
   };
 
@@ -529,21 +551,21 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
     setBusy(true);
     try {
       let payload: any = {};
-      if (activeEndpoint === "academic-years") {
+      if (effectiveEndpoint === "academic-years") {
         payload = { institution_id: form.institution_id, label: form.label, start_date: form.start_date, end_date: form.end_date, is_current: form.is_current === "true", is_active: form.is_active === "true" };
-      } else if (activeEndpoint === "courses") {
+      } else if (effectiveEndpoint === "courses") {
         payload = { institution_id: form.institution_id, name: form.name, code: form.code, level: form.level, duration_years: Number(form.duration_years), is_active: form.is_active === "true" };
-      } else if (activeEndpoint === "branches") {
+      } else if (effectiveEndpoint === "branches") {
         payload = { course_id: form.course_id, name: form.name, code: form.code, is_active: form.is_active === "true" };
-      } else if (activeEndpoint === "subjects") {
-        payload = { branch_id: form.branch_id, academic_year_id: form.academic_year_id || null, name: form.name, code: form.code, credits: Number(form.credits), is_active: form.is_active === "true" };
-      } else if (activeEndpoint === "classes") {
-        payload = { branch_id: form.branch_id, academic_year_id: form.academic_year_id || null, name: form.name, semester: Number(form.semester) };
+      } else if (effectiveEndpoint === "subjects") {
+        payload = { course_id: form.course_id, class_id: form.class_id, branch_id: form.branch_id || null, academic_year_id: form.academic_year_id || null, semester: form.semester ? Number(form.semester) : null, name: form.name, code: form.code, credits: Number(form.credits), is_active: form.is_active === "true" };
+      } else if (effectiveEndpoint === "classes") {
+        payload = { course_id: form.course_id, branch_id: form.branch_id || null, academic_year_id: form.academic_year_id || null, name: form.name, year_no: form.year_no ? Number(form.year_no) : null, semester: form.semester ? Number(form.semester) : null, intake_capacity: Number(form.intake_capacity || 60) };
       } else {
         payload = { class_id: form.class_id, name: form.name, max_strength: Number(form.max_strength) };
       }
-      if (editing) await api.patch(`/${activeEndpoint}/${editing.id}`, payload);
-      else await api.post(`/${activeEndpoint}`, payload);
+      if (editing) await api.patch(`/${effectiveEndpoint}/${editing.id}`, payload);
+      else await api.post(`/${effectiveEndpoint}`, payload);
       toast.success("Saved");
       setMode(null);
       await refreshActive();
@@ -555,9 +577,9 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
   // ── Table data ────────────────────────────────────────────────────────────
 
   const activeData = useMemo(() => {
-    const page = dataStore[activeEndpoint] || emptyPage();
-    return filterPage(page, params.search, searchFields(activeEndpoint) as any);
-  }, [dataStore, activeEndpoint, params.search]);
+    const page = dataStore[effectiveEndpoint] || emptyPage();
+    return filterPage(page, params.search, searchFields(effectiveEndpoint) as any);
+  }, [dataStore, effectiveEndpoint, params.search]);
 
   const tableData = localPage<any>(activeData as Paginated<any>, params);
 
@@ -603,7 +625,7 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
       </Tabs>
 
       <Filters
-        activeEndpoint={activeEndpoint}
+        activeEndpoint={effectiveEndpoint}
         institutions={institutions}
         courses={courseOptions}
         branches={branchOptions}
@@ -619,7 +641,7 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
       />
 
       <DataTable<any>
-        columns={getColumns(activeEndpoint, { courseName, branchName, yearName, className }, openEdit)}
+        columns={getColumns(effectiveEndpoint, { courseName, branchName, yearName, className }, openEdit)}
         data={tableData as Paginated<any>}
         loading={loading}
         params={params}
@@ -638,7 +660,7 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
         onSubmit={save}
       >
         <AcademicForm
-          activeEndpoint={activeEndpoint}
+          activeEndpoint={effectiveEndpoint}
           form={form}
           setField={setField}
           institutions={institutions}
@@ -766,6 +788,7 @@ function AcademicForm({
   classes: ClassRow[];
   currentInstitutionLabel: string;
 }) {
+  const ep = resolveEndpoint(activeEndpoint);
   return (
     <FieldGrid>
       <SelectField
@@ -780,12 +803,13 @@ function AcademicForm({
         })()}
       />
 
-      {activeEndpoint === "branches" && (
+      {ep === "branches" && (
         <SelectField label="Course" value={form.course_id || ""} onChange={(v) => setField("course_id", v)} items={courses.map((c) => ({ id: c.id, label: c.name }))} />
       )}
 
-      {(activeEndpoint === "subjects" || activeEndpoint === "classes") && (
+      {(ep === "subjects" || ep === "classes") && (
         <>
+          <SelectField label="Course" value={form.course_id || ""} onChange={(v) => setField("course_id", v)} items={courses.map((c) => ({ id: c.id, label: c.name }))} />
           <SelectField label="Branch" value={form.branch_id || ""} onChange={(v) => setField("branch_id", v)} items={branches.map((b) => ({ id: b.id, label: b.name }))} />
           <SelectField
             label="Academic Year"
@@ -796,11 +820,18 @@ function AcademicForm({
         </>
       )}
 
-      {activeEndpoint === "sections" && (
+      {ep === "sections" && (
         <SelectField label="Class" value={form.class_id || ""} onChange={(v) => setField("class_id", v)} items={classes.map((c) => ({ id: c.id, label: c.name }))} />
       )}
 
-      {activeEndpoint === "academic-years" && (
+      {ep === "subjects" && (
+        <>
+          <SelectField label="Class" value={form.class_id || ""} onChange={(v) => setField("class_id", v)} items={classes.map((c) => ({ id: c.id, label: c.name }))} />
+          <Field label="Semester (Optional)"><Input type="number" value={form.semester ?? ""} onChange={(e) => setField("semester", e.target.value)} /></Field>
+        </>
+      )}
+
+      {ep === "academic-years" && (
         <>
           <Field label="Label"><Input value={form.label || ""} onChange={(e) => setField("label", e.target.value)} placeholder="2026-27" /></Field>
           <Field label="Start Date"><Input type="date" value={form.start_date || ""} onChange={(e) => setField("start_date", e.target.value)} /></Field>
@@ -810,7 +841,7 @@ function AcademicForm({
         </>
       )}
 
-      {activeEndpoint === "courses" && (
+      {ep === "courses" && (
         <>
           <Field label="Name"><Input value={form.name || ""} onChange={(e) => setField("name", e.target.value)} placeholder="Bachelor of Engineering" /></Field>
           <Field label="Code"><Input value={form.code || ""} onChange={(e) => setField("code", e.target.value)} placeholder="BE" /></Field>
@@ -820,32 +851,36 @@ function AcademicForm({
         </>
       )}
 
-      {["branches", "subjects", "classes", "sections"].includes(activeEndpoint) && (
+      {["branches", "subjects", "classes", "sections"].includes(ep) && (
         <Field label="Name">
-          <Input value={form.name || ""} onChange={(e) => setField("name", e.target.value)} placeholder={activeEndpoint === "sections" ? "A" : "Name"} />
+          <Input value={form.name || ""} onChange={(e) => setField("name", e.target.value)} placeholder={ep === "sections" ? "A" : "Name"} />
         </Field>
       )}
 
-      {(activeEndpoint === "branches" || activeEndpoint === "subjects") && (
+      {(ep === "branches" || ep === "subjects") && (
         <Field label="Code"><Input value={form.code || ""} onChange={(e) => setField("code", e.target.value)} placeholder="CSE" /></Field>
       )}
 
-      {activeEndpoint === "subjects" && (
+      {ep === "subjects" && (
         <>
           <Field label="Credits"><Input type="number" value={form.credits ?? 0} onChange={(e) => setField("credits", e.target.value)} /></Field>
           <BooleanSelect label="Status" value={form.is_active || "true"} onChange={(v) => setField("is_active", v)} activeText="Active" inactiveText="Inactive" />
         </>
       )}
 
-      {activeEndpoint === "branches" && (
+      {ep === "branches" && (
         <BooleanSelect label="Status" value={form.is_active || "true"} onChange={(v) => setField("is_active", v)} activeText="Active" inactiveText="Inactive" />
       )}
 
-      {activeEndpoint === "classes" && (
-        <Field label="Semester"><Input type="number" value={form.semester ?? 1} onChange={(e) => setField("semester", e.target.value)} /></Field>
+      {ep === "classes" && (
+        <>
+          <Field label="Year (Optional)"><Input type="number" value={form.year_no ?? ""} onChange={(e) => setField("year_no", e.target.value)} /></Field>
+          <Field label="Semester (Optional)"><Input type="number" value={form.semester ?? ""} onChange={(e) => setField("semester", e.target.value)} /></Field>
+          <Field label="Intake Capacity"><Input type="number" value={form.intake_capacity ?? 60} onChange={(e) => setField("intake_capacity", e.target.value)} /></Field>
+        </>
       )}
 
-      {activeEndpoint === "sections" && (
+      {ep === "sections" && (
         <Field label="Max Strength"><Input type="number" value={form.max_strength ?? 60} onChange={(e) => setField("max_strength", e.target.value)} /></Field>
       )}
     </FieldGrid>

@@ -284,17 +284,23 @@ export function TeachersPage() {
     }
 
     setTimetableLoading(true);
+    const selectedFromList = teachers.find((t) => t.id === teacherId) || null;
+    if (selectedFromList) setSelectedTeacher(selectedFromList);
     try {
-      const [teacherRes, timetableRes] = await Promise.all([
-        api.get<any>(`/teachers/${teacherId}`),
-        api.get<any>(`/teachers/${teacherId}/timetable`),
-      ]);
+      const teacherRes = await api.get<any>(`/teachers/${teacherId}`);
       setSelectedTeacher((teacherRes?.data || teacherRes) as TeacherRow);
+    } catch (error: any) {
+      if (!selectedFromList) {
+        toast.error(error?.message || "Failed to load teacher details");
+        setSelectedTeacher(null);
+      }
+    }
+    try {
+      const timetableRes = await api.get<any>(`/teachers/${teacherId}/timetable`);
       setTimetable(listFrom<TeacherTimetableRow>(timetableRes));
     } catch (error: any) {
-      toast.error(error?.message || "Failed to load teacher details");
-      setSelectedTeacher(null);
       setTimetable([]);
+      toast.error(error?.message || "Failed to load timetable");
     } finally {
       setTimetableLoading(false);
     }
@@ -302,18 +308,23 @@ export function TeachersPage() {
 
   const loadMeta = async () => {
     if (!user?.institution_id) return;
-    try {
-      const [yearsRes, courseRes, candidateRes] = await Promise.all([
-        api.get<any>(`/academic-years?institution_id=${user.institution_id}&page=1&page_size=100`),
-        api.get<any>(`/courses?institution_id=${user.institution_id}&page=1&page_size=100`),
-        canManage ? api.get<any>("/teachers/candidates") : Promise.resolve({ data: [] }),
-      ]);
-      setYears(listFrom<AcademicYearOption>(yearsRes));
-      setCourses(listFrom<Option>(courseRes));
-      setCandidates(listFrom<TeacherCandidate>(candidateRes));
-    } catch (error: any) {
-      toast.error(error?.message || "Failed to load teacher setup data");
+    const [yearsRes, courseRes, candidateRes] = await Promise.allSettled([
+      api.get<any>(`/academic-years?institution_id=${user.institution_id}&page=1&page_size=100`),
+      api.get<any>(`/courses?institution_id=${user.institution_id}&page=1&page_size=100`),
+      canManage ? api.get<any>("/teachers/candidates") : Promise.resolve({ data: [] }),
+    ]);
+
+    if (yearsRes.status === "fulfilled") setYears(listFrom<AcademicYearOption>(yearsRes.value));
+    else setYears([]);
+
+    if (courseRes.status === "fulfilled") setCourses(listFrom<Option>(courseRes.value));
+    else {
+      setCourses([]);
+      toast.error("Course dropdown could not be loaded. Check course permissions/data.");
     }
+
+    if (candidateRes.status === "fulfilled") setCandidates(listFrom<TeacherCandidate>(candidateRes.value));
+    else setCandidates([]);
   };
 
   useEffect(() => {
@@ -375,7 +386,7 @@ export function TeachersPage() {
       try {
         const [sectionRes, subjectRes] = await Promise.all([
           api.get<any>(`/sections?class_id=${selectedClass.class_id}&page=1&page_size=100`),
-          api.get<any>(`/subjects?branch_id=${selectedClass.branch_id}&page=1&page_size=100`),
+          api.get<any>(`/subjects?class_id=${selectedClass.class_id}&page=1&page_size=100`),
         ]);
         setSections(listFrom<Option>(sectionRes));
         setSubjects(listFrom<Option>(subjectRes));
@@ -394,6 +405,10 @@ export function TeachersPage() {
   };
 
   const openClassModal = () => {
+    if (!selectedTeacher) {
+      toast.error("Select a teacher first");
+      return;
+    }
     setClassForm({ course_id: "", branch_id: "", class_id: "" });
     setClassModalOpen(true);
   };
@@ -560,11 +575,25 @@ export function TeachersPage() {
           searchPlaceholder="Search teachers by name, email or employee code…"
           rowActions={(row) => (
             <div className="inline-flex gap-1">
-              <Button variant="ghost" size="sm" onClick={() => setSelectedTeacherId(row.id)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSelectedTeacherId(row.id);
+                  loadTeacherDetail(row.id).catch(() => {});
+                }}
+              >
                 View
               </Button>
               {canManage && (
-                <Button variant="ghost" size="sm" onClick={() => setSelectedTeacherId(row.id)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedTeacherId(row.id);
+                    loadTeacherDetail(row.id).then(() => openClassModal()).catch(() => {});
+                  }}
+                >
                   Manage
                 </Button>
               )}
@@ -752,6 +781,11 @@ export function TeachersPage() {
         submitLabel="Link Class"
       >
         <div className="space-y-4">
+          {courses.length === 0 && (
+            <div className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
+              No courses available for your login. Ensure courses exist and your role has course/branch/class read-manage permissions.
+            </div>
+          )}
           <FieldLabel label="Course">
             <Select value={classForm.course_id} onValueChange={(value) => setClassForm((prev) => ({ ...prev, course_id: value }))}>
               <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>

@@ -1317,3 +1317,13 @@
 [data-sidebar="separator"] {
   background: oklch(1 0 0 / 0.12) !important;
 }
+
+/* Hide scrollbar but keep scroll behavior */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}

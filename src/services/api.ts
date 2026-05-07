@@ -10,12 +10,30 @@ type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").trim().replace(/\/$/, "");
 
 const TOKEN_KEY = "sms_token";
+const AUTH_KEY = "sms_auth";
 
 export const tokenStore = {
   get: () => (typeof window === "undefined" ? null : sessionStorage.getItem(TOKEN_KEY)),
   set: (t: string) => sessionStorage.setItem(TOKEN_KEY, t),
   clear: () => sessionStorage.removeItem(TOKEN_KEY),
 };
+
+let sessionExpiryNotified = false;
+
+function forceSessionLogout(message = "Session expired. Please login again.") {
+  if (typeof window === "undefined") return;
+  tokenStore.clear();
+  sessionStorage.removeItem(AUTH_KEY);
+  if (!sessionExpiryNotified) {
+    sessionExpiryNotified = true;
+    toast.error(message);
+  }
+  if (window.location.pathname !== "/login") {
+    setTimeout(() => {
+      window.location.href = "/login";
+    }, 300);
+  }
+}
 
 type Handler<T = any> = (body: any, params: Record<string, string>) => Promise<T> | T;
 type Route = { method: Method; pattern: RegExp; handler: Handler };
@@ -45,12 +63,23 @@ async function backendRequest<T>(method: Method, url: string, body?: any): Promi
   });
 
   const raw = await res.text();
-  const data = raw ? JSON.parse(raw) : null;
+  let data: any = null;
+  try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
   if (!res.ok) {
-    const msg = data?.message || data?.error || `Request failed (${res.status})`;
+    if (res.status === 401 && !url.startsWith("/auth/")) {
+      forceSessionLogout();
+      throw new Error("Session expired");
+    }
+    const msg =
+      data?.message ||
+      data?.error ||
+      (res.status === 404
+        ? `API not found (404): ${method} ${url}`
+        : `Request failed (${res.status})`);
     toast.error(msg);
     throw new Error(msg);
   }
+  sessionExpiryNotified = false;
   return data as T;
 }
 
@@ -62,7 +91,8 @@ async function request<T>(method: Method, url: string, body?: any): Promise<T> {
   // Auto-attach token (simulated)
   const token = tokenStore.get();
   if (!token && !url.startsWith("/auth/")) {
-    const err = new Error("Unauthorized");
+    forceSessionLogout();
+    const err = new Error("Session expired");
     (err as any).status = 401;
     throw err;
   }

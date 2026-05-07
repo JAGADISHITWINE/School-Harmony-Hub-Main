@@ -44,8 +44,9 @@ const seedMenus: MenuItem[] = [
   { id: "m6", label: "Staff", path: "/staff", icon: "UserCog", order: 6, roles: ["super_admin","admin"], permission: "staff.view" },
   { id: "m7", label: "Classes", path: "/classes", icon: "School", order: 7, roles: ["super_admin","admin"], permission: "classes.view" },
   { id: "m8", label: "Attendance", path: "/attendance", icon: "CalendarCheck", order: 8, roles: ["super_admin","admin","teacher"], permission: "attendance.view" },
-  { id: "m9", label: "Fees", path: "/fees", icon: "Wallet", order: 9, roles: ["super_admin","admin","accountant"], permission: "fees.view" },
-  { id: "m10", label: "Notifications", path: "/notifications", icon: "Bell", order: 10, roles: ["super_admin","admin","teacher","accountant"], permission: "notifications.view" },
+  { id: "m9", label: "Timetable", path: "/timetable", icon: "CalendarDays", order: 9, roles: ["super_admin","admin","teacher"], permission: "classes.view" },
+  { id: "m10", label: "Fees", path: "/fees", icon: "Wallet", order: 10, roles: ["super_admin","admin","accountant"], permission: "fees.view" },
+  { id: "m11", label: "Notifications", path: "/notifications", icon: "Bell", order: 11, roles: ["super_admin","admin","teacher","accountant"], permission: "notifications.view" },
 ];
 
 const seedClasses: SchoolClass[] = [

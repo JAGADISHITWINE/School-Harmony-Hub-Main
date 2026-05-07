@@ -94,7 +94,7 @@ export function Sidebar() {
         </button>
       </div>
 
-      <nav className="p-2 space-y-1 overflow-y-auto flex-1 min-h-0">
+      <nav className="p-2 space-y-1 overflow-y-auto flex-1 min-h-0 hide-scrollbar">
         {sortedMenus.map((m) => (
           <MenuNode
             key={m.id}
