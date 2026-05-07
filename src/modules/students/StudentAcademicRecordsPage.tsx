@@ -165,7 +165,7 @@ export function StudentAcademicRecordsPage() {
     const loadStudents = async () => {
       setLoading(true);
       try {
-        const res = await api.get<any>("/students?page=1&page_size=200");
+        const res = await api.get<any>("/students?page=1&page_size=100");
         const rows = ((Array.isArray(res?.data?.items) && res.data.items) || []) as BackendStudent[];
         if (!cancelled) setStudents(rows);
       } catch {
@@ -415,7 +415,7 @@ export function StudentAcademicRecordsPage() {
       toast.success("Academic record added");
       closeRecordModal(false);
       setLoading(true);
-      const res = await api.get<any>("/students?page=1&page_size=200");
+      const res = await api.get<any>("/students?page=1&page_size=100");
       const rows = ((Array.isArray(res?.data?.items) && res.data.items) || []) as BackendStudent[];
       setStudents(rows);
     } catch {
