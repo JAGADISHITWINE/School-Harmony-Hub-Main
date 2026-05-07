@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppUsersRouteImport } from './routes/_app.users'
 import { Route as AppTimetableRouteImport } from './routes/_app.timetable'
 import { Route as AppTeachersRouteImport } from './routes/_app.teachers'
+import { Route as AppTeacherLinkingRouteImport } from './routes/_app.teacher-linking'
 import { Route as AppStudentsRouteImport } from './routes/_app.students'
 import { Route as AppStaffRouteImport } from './routes/_app.staff'
 import { Route as AppRolesRouteImport } from './routes/_app.roles'
@@ -22,6 +23,7 @@ import { Route as AppOrganizationsRouteImport } from './routes/_app.organization
 import { Route as AppNotificationsRouteImport } from './routes/_app.notifications'
 import { Route as AppMenusRouteImport } from './routes/_app.menus'
 import { Route as AppInstitutionsRouteImport } from './routes/_app.institutions'
+import { Route as AppHodLinkingRouteImport } from './routes/_app.hod-linking'
 import { Route as AppFeesRouteImport } from './routes/_app.fees'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppClassesRouteImport } from './routes/_app.classes'
@@ -73,6 +75,11 @@ const AppTeachersRoute = AppTeachersRouteImport.update({
   path: '/teachers',
   getParentRoute: () => AppRoute,
 } as any)
+const AppTeacherLinkingRoute = AppTeacherLinkingRouteImport.update({
+  id: '/teacher-linking',
+  path: '/teacher-linking',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppStudentsRoute = AppStudentsRouteImport.update({
   id: '/students',
   path: '/students',
@@ -106,6 +113,11 @@ const AppMenusRoute = AppMenusRouteImport.update({
 const AppInstitutionsRoute = AppInstitutionsRouteImport.update({
   id: '/institutions',
   path: '/institutions',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppHodLinkingRoute = AppHodLinkingRouteImport.update({
+  id: '/hod-linking',
+  path: '/hod-linking',
   getParentRoute: () => AppRoute,
 } as any)
 const AppFeesRoute = AppFeesRouteImport.update({
@@ -222,6 +234,7 @@ export interface FileRoutesByFullPath {
   '/classes': typeof AppClassesRoute
   '/dashboard': typeof AppDashboardRoute
   '/fees': typeof AppFeesRoute
+  '/hod-linking': typeof AppHodLinkingRoute
   '/institutions': typeof AppInstitutionsRoute
   '/menus': typeof AppMenusRoute
   '/notifications': typeof AppNotificationsRoute
@@ -229,6 +242,7 @@ export interface FileRoutesByFullPath {
   '/roles': typeof AppRolesRoute
   '/staff': typeof AppStaffRoute
   '/students': typeof AppStudentsRouteWithChildren
+  '/teacher-linking': typeof AppTeacherLinkingRoute
   '/teachers': typeof AppTeachersRoute
   '/timetable': typeof AppTimetableRoute
   '/users': typeof AppUsersRoute
@@ -257,12 +271,14 @@ export interface FileRoutesByTo {
   '/classes': typeof AppClassesRoute
   '/dashboard': typeof AppDashboardRoute
   '/fees': typeof AppFeesRoute
+  '/hod-linking': typeof AppHodLinkingRoute
   '/institutions': typeof AppInstitutionsRoute
   '/menus': typeof AppMenusRoute
   '/notifications': typeof AppNotificationsRoute
   '/organizations': typeof AppOrganizationsRoute
   '/roles': typeof AppRolesRoute
   '/staff': typeof AppStaffRoute
+  '/teacher-linking': typeof AppTeacherLinkingRoute
   '/teachers': typeof AppTeachersRoute
   '/timetable': typeof AppTimetableRoute
   '/users': typeof AppUsersRoute
@@ -293,6 +309,7 @@ export interface FileRoutesById {
   '/_app/classes': typeof AppClassesRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/fees': typeof AppFeesRoute
+  '/_app/hod-linking': typeof AppHodLinkingRoute
   '/_app/institutions': typeof AppInstitutionsRoute
   '/_app/menus': typeof AppMenusRoute
   '/_app/notifications': typeof AppNotificationsRoute
@@ -300,6 +317,7 @@ export interface FileRoutesById {
   '/_app/roles': typeof AppRolesRoute
   '/_app/staff': typeof AppStaffRoute
   '/_app/students': typeof AppStudentsRouteWithChildren
+  '/_app/teacher-linking': typeof AppTeacherLinkingRoute
   '/_app/teachers': typeof AppTeachersRoute
   '/_app/timetable': typeof AppTimetableRoute
   '/_app/users': typeof AppUsersRoute
@@ -330,6 +348,7 @@ export interface FileRouteTypes {
     | '/classes'
     | '/dashboard'
     | '/fees'
+    | '/hod-linking'
     | '/institutions'
     | '/menus'
     | '/notifications'
@@ -337,6 +356,7 @@ export interface FileRouteTypes {
     | '/roles'
     | '/staff'
     | '/students'
+    | '/teacher-linking'
     | '/teachers'
     | '/timetable'
     | '/users'
@@ -365,12 +385,14 @@ export interface FileRouteTypes {
     | '/classes'
     | '/dashboard'
     | '/fees'
+    | '/hod-linking'
     | '/institutions'
     | '/menus'
     | '/notifications'
     | '/organizations'
     | '/roles'
     | '/staff'
+    | '/teacher-linking'
     | '/teachers'
     | '/timetable'
     | '/users'
@@ -400,6 +422,7 @@ export interface FileRouteTypes {
     | '/_app/classes'
     | '/_app/dashboard'
     | '/_app/fees'
+    | '/_app/hod-linking'
     | '/_app/institutions'
     | '/_app/menus'
     | '/_app/notifications'
@@ -407,6 +430,7 @@ export interface FileRouteTypes {
     | '/_app/roles'
     | '/_app/staff'
     | '/_app/students'
+    | '/_app/teacher-linking'
     | '/_app/teachers'
     | '/_app/timetable'
     | '/_app/users'
@@ -479,6 +503,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTeachersRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/teacher-linking': {
+      id: '/_app/teacher-linking'
+      path: '/teacher-linking'
+      fullPath: '/teacher-linking'
+      preLoaderRoute: typeof AppTeacherLinkingRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/students': {
       id: '/_app/students'
       path: '/students'
@@ -526,6 +557,13 @@ declare module '@tanstack/react-router' {
       path: '/institutions'
       fullPath: '/institutions'
       preLoaderRoute: typeof AppInstitutionsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/hod-linking': {
+      id: '/_app/hod-linking'
+      path: '/hod-linking'
+      fullPath: '/hod-linking'
+      preLoaderRoute: typeof AppHodLinkingRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/fees': {
@@ -707,6 +745,7 @@ interface AppRouteChildren {
   AppClassesRoute: typeof AppClassesRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppFeesRoute: typeof AppFeesRoute
+  AppHodLinkingRoute: typeof AppHodLinkingRoute
   AppInstitutionsRoute: typeof AppInstitutionsRoute
   AppMenusRoute: typeof AppMenusRoute
   AppNotificationsRoute: typeof AppNotificationsRoute
@@ -714,6 +753,7 @@ interface AppRouteChildren {
   AppRolesRoute: typeof AppRolesRoute
   AppStaffRoute: typeof AppStaffRoute
   AppStudentsRoute: typeof AppStudentsRouteWithChildren
+  AppTeacherLinkingRoute: typeof AppTeacherLinkingRoute
   AppTeachersRoute: typeof AppTeachersRoute
   AppTimetableRoute: typeof AppTimetableRoute
   AppUsersRoute: typeof AppUsersRoute
@@ -734,6 +774,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppClassesRoute: AppClassesRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppFeesRoute: AppFeesRoute,
+  AppHodLinkingRoute: AppHodLinkingRoute,
   AppInstitutionsRoute: AppInstitutionsRoute,
   AppMenusRoute: AppMenusRoute,
   AppNotificationsRoute: AppNotificationsRoute,
@@ -741,6 +782,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppRolesRoute: AppRolesRoute,
   AppStaffRoute: AppStaffRoute,
   AppStudentsRoute: AppStudentsRouteWithChildren,
+  AppTeacherLinkingRoute: AppTeacherLinkingRoute,
   AppTeachersRoute: AppTeachersRoute,
   AppTimetableRoute: AppTimetableRoute,
   AppUsersRoute: AppUsersRoute,
