@@ -420,7 +420,7 @@ function LoginPage() {
               </h1>
 
               <p className="text-sm mt-1">
-                Use your admin credentials to continue.
+                Use your credentials to continue.
               </p>
 
               <form
