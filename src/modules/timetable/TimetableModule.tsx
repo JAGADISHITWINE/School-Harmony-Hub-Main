@@ -63,6 +63,7 @@ function facultyTone(name: string) {
 
 export function TimetableModule() {
   const { user } = useAuth();
+  const isTeacher = user?.role === "teacher";
 
   const [years, setYears] = useState<AcademicYear[]>([]);
   const [courses, setCourses] = useState<Option[]>([]);
@@ -83,6 +84,7 @@ export function TimetableModule() {
   const [search, setSearch] = useState("");
   const [importFile, setImportFile] = useState<File | null>(null);
   const [teacherId, setTeacherId] = useState("");
+  const [reassignTargetTeacherId, setReassignTargetTeacherId] = useState("");
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [subjectOptions, setSubjectOptions] = useState<Option[]>([]);
   const [form, setForm] = useState({
@@ -110,6 +112,7 @@ export function TimetableModule() {
       const tRows = listFrom<Teacher>(tRes);
       setTeachers(tRows);
       setTeacherId(tRows[0]?.id || "");
+      setReassignTargetTeacherId(tRows[0]?.id || "");
     } catch (e: any) {
       toast.error(e?.message || "Failed to load filters");
     }
@@ -185,6 +188,16 @@ export function TimetableModule() {
   const loadTimetable = async () => {
     setLoading(true);
     try {
+      if (isTeacher) {
+        const res = await api.get<any>("/teachers/self/my-timetable");
+        const rows = listFrom<TimetableSlot>(res).map((slot) => ({
+          ...slot,
+          teacher_name: user?.name || "Teacher",
+          teacher_designation: "TEACHER",
+        }));
+        setSlots(rows);
+        return;
+      }
       const teachersRes = await api.get<any>("/teachers?page=1&page_size=100");
       const teachers = listFrom<Teacher>(teachersRes);
 
@@ -215,7 +228,7 @@ export function TimetableModule() {
 
   useEffect(() => {
     loadTimetable();
-  }, []);
+  }, [isTeacher, user?.name]);
 
   const createSlot = async () => {
     if (!teacherId || !form.academic_year_id || !form.class_id || !form.section_id || !form.subject_id) {
@@ -268,6 +281,26 @@ export function TimetableModule() {
       end_time: "10:00",
       room_no: "",
     }));
+  };
+
+  const reassignSlot = async (slot: MergedSlot) => {
+    if (!reassignTargetTeacherId) {
+      toast.error("Select target teacher");
+      return;
+    }
+    if (reassignTargetTeacherId === slot.teacher_id) {
+      toast.error("Choose a different teacher");
+      return;
+    }
+    try {
+      await api.patch(`/teachers/timetable/${slot.id}/reassign`, {
+        target_teacher_id: reassignTargetTeacherId,
+      });
+      toast.success("Class reallocated");
+      await loadTimetable();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to reallocate class");
+    }
   };
 
   const importTimetable = async () => {
@@ -395,7 +428,7 @@ export function TimetableModule() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="view">Timetable View</TabsTrigger>
-          <TabsTrigger value="create">Create Timetable</TabsTrigger>
+          {!isTeacher && <TabsTrigger value="create">Create Timetable</TabsTrigger>}
         </TabsList>
         <TabsContent value="view">
       <Card className="p-4 grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
@@ -430,6 +463,15 @@ export function TimetableModule() {
         <div className="flex items-end">
           <Button variant="outline" onClick={loadTimetable}>Refresh Timetable</Button>
         </div>
+        {!isTeacher && (
+          <div>
+            <Label>Reallocate To</Label>
+            <Select value={reassignTargetTeacherId} onValueChange={setReassignTargetTeacherId}>
+              <SelectTrigger><SelectValue placeholder="Select teacher" /></SelectTrigger>
+              <SelectContent>{teachers.map((t) => <SelectItem key={t.id} value={t.id}>{t.full_name}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+        )}
       </Card>
       <Card className="p-4">
         <div className="mb-3 flex items-center justify-between">
@@ -486,7 +528,8 @@ export function TimetableModule() {
                                 <div className="mt-1 flex items-center gap-1">
                                   <Badge variant="secondary" className="text-[10px]">{e.teacher_designation}</Badge>
                                   {e.room_no && <Badge variant="outline" className="text-[10px]">Room {e.room_no}</Badge>}
-                                  <Button size="sm" variant="outline" className="h-5 px-2 text-[10px]" onClick={() => startEditSlot(e)}>Edit</Button>
+                                  {!isTeacher && <Button size="sm" variant="outline" className="h-5 px-2 text-[10px]" onClick={() => startEditSlot(e)}>Edit</Button>}
+                                  {!isTeacher && <Button size="sm" variant="outline" className="h-5 px-2 text-[10px]" onClick={() => reassignSlot(e)}>Reallocate</Button>}
                                 </div>
                               </div>
                             ))}
@@ -546,7 +589,8 @@ export function TimetableModule() {
                       <td className="border p-2 text-sm">
                         <div className="flex items-center justify-between gap-2">
                           <span>{e.teacher_name}</span>
-                          <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => startEditSlot(e)}>Edit</Button>
+                          {!isTeacher && <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => startEditSlot(e)}>Edit</Button>}
+                          {!isTeacher && <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => reassignSlot(e)}>Reallocate</Button>}
                         </div>
                       </td>
                     </tr>

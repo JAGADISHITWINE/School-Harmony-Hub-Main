@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,8 @@ import type { SchoolClass, Section } from "@/types";
 import { toast } from "sonner";
 
 export function ClassesPage() {
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
+  const isTeacher = user?.role === "teacher";
   const canManage = hasPermission("classes.manage");
   const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [editing, setEditing] = useState<SchoolClass | null>(null);
@@ -21,12 +22,125 @@ export function ClassesPage() {
   const [deleting, setDeleting] = useState<SchoolClass | null>(null);
   const [name, setName] = useState(""); const [grade, setGrade] = useState(9);
   const [sections, setSections] = useState<Section[]>([]);
+  const [teacherSlots, setTeacherSlots] = useState<any[]>([]);
+  const [selectedSectionId, setSelectedSectionId] = useState("");
+  const [selectedAcademicYearId, setSelectedAcademicYearId] = useState("");
+  const [sectionStudents, setSectionStudents] = useState<any[]>([]);
+  const [sectionSessions, setSectionSessions] = useState<any[]>([]);
 
   const load = async () => {
+    if (isTeacher) {
+      const res = await api.get<any>("/teachers/self/my-timetable");
+      const slots =
+        (Array.isArray(res?.data?.items) && res.data.items) ||
+        (Array.isArray(res?.data) && res.data) ||
+        (Array.isArray(res) && res) ||
+        [];
+      setTeacherSlots(slots);
+      const first = slots[0];
+      setSelectedSectionId(first?.section_id || "");
+      setSelectedAcademicYearId(first?.academic_year_id || "");
+      return;
+    }
     const r = await api.post<{data: SchoolClass[]}>("/classes/query", { pageSize: 100 });
     setClasses(r.data);
   };
-  useEffect(() => { load().catch(()=>{}); }, []);
+  useEffect(() => { load().catch(()=>{}); }, [isTeacher]);
+
+  useEffect(() => {
+    if (!isTeacher || !selectedSectionId || !selectedAcademicYearId) {
+      setSectionStudents([]);
+      setSectionSessions([]);
+      return;
+    }
+    (async () => {
+      const [studentsRes, sessionsRes] = await Promise.all([
+        api.get<any>(`/attendance/section-students?section_id=${selectedSectionId}&academic_year_id=${selectedAcademicYearId}`),
+        api.get<any>(`/attendance/sessions?section_id=${selectedSectionId}&page=1&page_size=20`),
+      ]);
+      const students =
+        (Array.isArray(studentsRes?.data?.items) && studentsRes.data.items) ||
+        (Array.isArray(studentsRes?.data) && studentsRes.data) ||
+        (Array.isArray(studentsRes) && studentsRes) ||
+        [];
+      const sessions =
+        (Array.isArray(sessionsRes?.data?.items) && sessionsRes.data.items) ||
+        (Array.isArray(sessionsRes?.data) && sessionsRes.data) ||
+        (Array.isArray(sessionsRes) && sessionsRes) ||
+        [];
+      setSectionStudents(students);
+      setSectionSessions(sessions);
+    })().catch(() => {
+      setSectionStudents([]);
+      setSectionSessions([]);
+    });
+  }, [isTeacher, selectedSectionId, selectedAcademicYearId]);
+
+  const handledSections = useMemo(() => {
+    const seen = new Set<string>();
+    return teacherSlots.filter((slot) => {
+      const key = `${slot.class_id}|${slot.section_id}|${slot.academic_year_id}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [teacherSlots]);
+
+  if (isTeacher) {
+    return (
+      <div className="space-y-4">
+        <PageHeader
+          title="My Classes"
+          description="Sections handled by you, with student and attendance list."
+        />
+        <Card className="p-4">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Handled Sections</p>
+          <div className="flex flex-wrap gap-2">
+            {handledSections.map((slot) => (
+              <Button
+                key={`${slot.class_id}-${slot.section_id}-${slot.academic_year_id}`}
+                variant={selectedSectionId === slot.section_id ? "default" : "outline"}
+                onClick={() => {
+                  setSelectedSectionId(slot.section_id);
+                  setSelectedAcademicYearId(slot.academic_year_id);
+                }}
+              >
+                {slot.class_name} / {slot.section_name}
+              </Button>
+            ))}
+            {handledSections.length === 0 && <span className="text-sm text-muted-foreground">No mapped classes found.</span>}
+          </div>
+        </Card>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card className="p-4">
+            <h3 className="font-semibold mb-3">Student List</h3>
+            <div className="space-y-2 max-h-[420px] overflow-auto">
+              {sectionStudents.map((s) => (
+                <div key={s.student_id} className="rounded-md border p-2">
+                  <div className="font-medium">{s.full_name}</div>
+                  <div className="text-xs text-muted-foreground">Roll: {s.roll_number}</div>
+                </div>
+              ))}
+              {sectionStudents.length === 0 && <div className="text-sm text-muted-foreground">No students in this section.</div>}
+            </div>
+          </Card>
+          <Card className="p-4">
+            <h3 className="font-semibold mb-3">Attendance Sessions</h3>
+            <div className="space-y-2 max-h-[420px] overflow-auto">
+              {sectionSessions.map((session) => (
+                <div key={session.id} className="rounded-md border p-2">
+                  <div className="font-medium">{new Date(session.session_date).toLocaleDateString()}</div>
+                  <div className="text-xs text-muted-foreground capitalize">Status: {session.status || "-"}</div>
+                </div>
+              ))}
+              {sectionSessions.length === 0 && <div className="text-sm text-muted-foreground">No attendance sessions yet.</div>}
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   const openCreate = () => { setEditing(null); setName(""); setGrade(9); setSections([]); setCreating(true); };
   const openEdit = (c: SchoolClass) => { setEditing(c); setName(c.name); setGrade(c.grade); setSections([...c.sections]); setCreating(true); };

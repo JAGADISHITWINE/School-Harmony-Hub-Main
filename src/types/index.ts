@@ -1,6 +1,6 @@
 export type ID = string;
 
-export type Role = "super_admin" | "admin" | "teacher" | "accountant" | "student";
+export type Role = "super_admin" | "admin" | "principal" | "hod" | "teacher" | "accountant" | "student";
 
 export type Permission =
   | "users.view" | "users.manage"

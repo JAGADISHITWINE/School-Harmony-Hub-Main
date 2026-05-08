@@ -155,7 +155,7 @@ function localPage<T extends Record<string, any>>(
 
 export function TeachersPage() {
   const { user } = useAuth();
-  const canManage = user?.role === "admin" || user?.role === "super_admin";
+  const canManage = user?.role === "admin" || user?.role === "super_admin" || user?.role === "principal" || user?.role === "hod";
 
   const [params, setParams] = useState<ListParams>({ page: 1, pageSize: 10 });
   const [teachers, setTeachers] = useState<TeacherRow[]>([]);

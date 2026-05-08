@@ -189,7 +189,7 @@ export const UsersModule = createCrudModule<BackendUser, V>({
   /* =========================
      FORM
   ========================= */
-  renderForm: (form) => {
+  renderForm: (form, mode) => {
     const {
       register,
       watch,
@@ -279,6 +279,7 @@ export const UsersModule = createCrudModule<BackendUser, V>({
               type={showPassword ? "text" : "password"}
               {...register("password")}
               className="pr-10"
+              placeholder={mode === "create" ? "Leave blank to auto-generate and email credentials" : "Optional"}
             />
             <button
               type="button"
@@ -294,6 +295,11 @@ export const UsersModule = createCrudModule<BackendUser, V>({
               )}
             </button>
           </div>
+          {mode === "create" && (
+            <p className="text-xs text-muted-foreground mt-1">
+              If empty, username and temporary password will be sent to user email.
+            </p>
+          )}
         </Field>
 
         {/* ROLE */}

@@ -19,9 +19,18 @@ function pickToken(payload: any): string {
 
 function normalizeRole(value: unknown): Role {
   const role = String(value || "").toLowerCase().replace(/\s+/g, "_");
-  if (role === "super_admin" || role === "admin" || role === "teacher" || role === "accountant" || role === "student") {
+  if (
+    role === "super_admin" ||
+    role === "admin" ||
+    role === "principal" ||
+    role === "hod" ||
+    role === "teacher" ||
+    role === "accountant" ||
+    role === "student"
+  ) {
     return role;
   }
+  if (role === "superadmin") return "super_admin";
   return "admin";
 }
 

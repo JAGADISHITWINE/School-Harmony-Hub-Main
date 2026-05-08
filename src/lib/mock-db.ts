@@ -12,6 +12,8 @@ const ALL_PERMS: Permission[] = [
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   super_admin: ALL_PERMS,
   admin: ALL_PERMS.filter(p => !p.startsWith("roles.") && !p.startsWith("menus.")),
+  principal: ALL_PERMS.filter(p => !p.startsWith("roles.") && !p.startsWith("menus.")),
+  hod: ["students.view","classes.view","classes.manage","attendance.view","attendance.manage","notifications.view"],
   teacher: ["students.view","classes.view","attendance.view","attendance.manage","notifications.view"],
   accountant: ["students.view","fees.view","fees.manage","notifications.view"],
   student: ["classes.view","attendance.view","fees.view"],
