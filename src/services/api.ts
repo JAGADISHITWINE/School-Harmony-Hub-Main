@@ -8,9 +8,10 @@ import { toast } from "sonner";
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").trim().replace(/\/$/, "");
-
+console.log("API Base URL:", API_BASE_URL || "Using mock API");
 const TOKEN_KEY = "sms_token";
 const AUTH_KEY = "sms_auth";
+export const MAX_PAGE_SIZE = 100;
 
 export const tokenStore = {
   get: () => (typeof window === "undefined" ? null : sessionStorage.getItem(TOKEN_KEY)),
@@ -46,17 +47,32 @@ export function register(method: Method, path: string, handler: Handler) {
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+function clampPageSize(url: string) {
+  const [path, query = ""] = url.split("?");
+  if (!query) return url;
+
+  const params = new URLSearchParams(query);
+  const requested = Number(params.get("page_size"));
+  if (Number.isFinite(requested) && requested > MAX_PAGE_SIZE) {
+    params.set("page_size", String(MAX_PAGE_SIZE));
+    return `${path}?${params.toString()}`;
+  }
+
+  return url;
+}
+
 function endpoint(path: string) {
   if (!API_BASE_URL) return path;
   return path.startsWith("/") ? `${API_BASE_URL}${path}` : `${API_BASE_URL}/${path}`;
 }
 
 async function backendRequest<T>(method: Method, url: string, body?: any): Promise<T> {
+  const safeUrl = clampPageSize(url);
   const token = tokenStore.get();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(endpoint(url), {
+  const res = await fetch(endpoint(safeUrl), {
     method,
     headers,
     body: body == null ? undefined : JSON.stringify(body),
@@ -66,7 +82,7 @@ async function backendRequest<T>(method: Method, url: string, body?: any): Promi
   let data: any = null;
   try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
   if (!res.ok) {
-    if (res.status === 401 && !url.startsWith("/auth/")) {
+    if (res.status === 401 && !safeUrl.startsWith("/auth/")) {
       forceSessionLogout();
       throw new Error("Session expired");
     }
@@ -74,7 +90,7 @@ async function backendRequest<T>(method: Method, url: string, body?: any): Promi
       data?.message ||
       data?.error ||
       (res.status === 404
-        ? `API not found (404): ${method} ${url}`
+        ? `API not found (404): ${method} ${safeUrl}`
         : `Request failed (${res.status})`);
     toast.error(msg);
     throw new Error(msg);
@@ -121,4 +137,41 @@ export const api = {
   put: <T,>(url: string, body?: any) => request<T>("PUT", url, body),
   patch: <T,>(url: string, body?: any) => request<T>("PATCH", url, body),
   delete: <T,>(url: string) => request<T>("DELETE", url),
+  upload: async <T,>(url: string, formData: FormData): Promise<T> => {
+    if (!API_BASE_URL) throw new Error("Bulk upload requires backend API");
+    const token = tokenStore.get();
+    const res = await fetch(endpoint(url), {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: formData,
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || data?.success === false) {
+      const msg = data?.message || `Upload failed (${res.status})`;
+      toast.error(msg);
+      throw new Error(msg);
+    }
+    return data as T;
+  },
+  download: async (url: string, filename: string) => {
+    if (!API_BASE_URL) throw new Error("Download requires backend API");
+    const token = tokenStore.get();
+    const res = await fetch(endpoint(url), {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (!res.ok) {
+      const msg = `Download failed (${res.status})`;
+      toast.error(msg);
+      throw new Error(msg);
+    }
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objectUrl);
+  },
 };

@@ -27,19 +27,30 @@ export function ClassesPage() {
   const [selectedAcademicYearId, setSelectedAcademicYearId] = useState("");
   const [sectionStudents, setSectionStudents] = useState<any[]>([]);
   const [sectionSessions, setSectionSessions] = useState<any[]>([]);
+  const [loadingTeacherScope, setLoadingTeacherScope] = useState(false);
 
   const load = async () => {
     if (isTeacher) {
-      const res = await api.get<any>("/teachers/self/my-timetable");
-      const slots =
-        (Array.isArray(res?.data?.items) && res.data.items) ||
-        (Array.isArray(res?.data) && res.data) ||
-        (Array.isArray(res) && res) ||
-        [];
-      setTeacherSlots(slots);
-      const first = slots[0];
-      setSelectedSectionId(first?.section_id || "");
-      setSelectedAcademicYearId(first?.academic_year_id || "");
+      setLoadingTeacherScope(true);
+      try {
+        const res = await api.get<any>("/teachers/self/my-timetable");
+        const slots =
+          (Array.isArray(res?.data?.items) && res.data.items) ||
+          (Array.isArray(res?.data) && res.data) ||
+          (Array.isArray(res) && res) ||
+          [];
+        setTeacherSlots(slots);
+        const first = slots[0];
+        setSelectedSectionId((prev) => prev || first?.section_id || "");
+        setSelectedAcademicYearId((prev) => prev || first?.academic_year_id || "");
+      } catch (error: any) {
+        toast.error(error?.message || "Failed to load your mapped classes");
+        setTeacherSlots([]);
+        setSelectedSectionId("");
+        setSelectedAcademicYearId("");
+      } finally {
+        setLoadingTeacherScope(false);
+      }
       return;
     }
     const r = await api.post<{data: SchoolClass[]}>("/classes/query", { pageSize: 100 });
@@ -54,25 +65,40 @@ export function ClassesPage() {
       return;
     }
     (async () => {
-      const [studentsRes, sessionsRes] = await Promise.all([
+      setLoadingTeacherScope(true);
+      const [studentsRes, sessionsRes] = await Promise.allSettled([
         api.get<any>(`/attendance/section-students?section_id=${selectedSectionId}&academic_year_id=${selectedAcademicYearId}`),
         api.get<any>(`/attendance/sessions?section_id=${selectedSectionId}&page=1&page_size=20`),
       ]);
-      const students =
-        (Array.isArray(studentsRes?.data?.items) && studentsRes.data.items) ||
-        (Array.isArray(studentsRes?.data) && studentsRes.data) ||
-        (Array.isArray(studentsRes) && studentsRes) ||
-        [];
-      const sessions =
-        (Array.isArray(sessionsRes?.data?.items) && sessionsRes.data.items) ||
-        (Array.isArray(sessionsRes?.data) && sessionsRes.data) ||
-        (Array.isArray(sessionsRes) && sessionsRes) ||
-        [];
-      setSectionStudents(students);
-      setSectionSessions(sessions);
+      if (studentsRes.status === "fulfilled") {
+        const payload = studentsRes.value;
+        const students =
+          (Array.isArray(payload?.data?.items) && payload.data.items) ||
+          (Array.isArray(payload?.data) && payload.data) ||
+          (Array.isArray(payload) && payload) ||
+          [];
+        setSectionStudents(students);
+      } else {
+        toast.error(studentsRes.reason?.message || "Failed to load section students");
+        setSectionStudents([]);
+      }
+
+      if (sessionsRes.status === "fulfilled") {
+        const payload = sessionsRes.value;
+        const sessions =
+          (Array.isArray(payload?.data?.items) && payload.data.items) ||
+          (Array.isArray(payload?.data) && payload.data) ||
+          (Array.isArray(payload) && payload) ||
+          [];
+        setSectionSessions(sessions);
+      } else {
+        setSectionSessions([]);
+      }
     })().catch(() => {
       setSectionStudents([]);
       setSectionSessions([]);
+    }).finally(() => {
+      setLoadingTeacherScope(false);
     });
   }, [isTeacher, selectedSectionId, selectedAcademicYearId]);
 
@@ -92,6 +118,7 @@ export function ClassesPage() {
         <PageHeader
           title="My Classes"
           description="Sections handled by you, with student and attendance list."
+          actions={<Button variant="outline" onClick={() => load().catch(() => {})}>Refresh</Button>}
         />
         <Card className="p-4">
           <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Handled Sections</p>
@@ -108,7 +135,11 @@ export function ClassesPage() {
                 {slot.class_name} / {slot.section_name}
               </Button>
             ))}
-            {handledSections.length === 0 && <span className="text-sm text-muted-foreground">No mapped classes found.</span>}
+            {handledSections.length === 0 && (
+              <span className="text-sm text-muted-foreground">
+                {loadingTeacherScope ? "Loading mapped classes..." : "No mapped classes found."}
+              </span>
+            )}
           </div>
         </Card>
 
@@ -122,7 +153,11 @@ export function ClassesPage() {
                   <div className="text-xs text-muted-foreground">Roll: {s.roll_number}</div>
                 </div>
               ))}
-              {sectionStudents.length === 0 && <div className="text-sm text-muted-foreground">No students in this section.</div>}
+              {sectionStudents.length === 0 && (
+                <div className="text-sm text-muted-foreground">
+                  {loadingTeacherScope ? "Loading students..." : "No students in this section."}
+                </div>
+              )}
             </div>
           </Card>
           <Card className="p-4">

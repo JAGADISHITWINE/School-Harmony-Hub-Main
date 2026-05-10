@@ -1,47 +1,101 @@
+import { useState } from "react";
 import { Ban, GraduationCap, RefreshCcw, ShieldAlert } from "lucide-react";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/common/PageHeader";
 import { StatCard } from "@/components/common/StatCard";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { DataTable, type Column } from "@/components/common/DataTable";
+import { StatusBadge } from "@/components/common/StatusBadge";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FormModal } from "@/components/common/FormModal";
+import { api } from "@/services";
+import { useList } from "@/hooks/use-crud";
+import type { ListParams, Paginated } from "@/types";
 import { StudentModuleNav } from "./StudentModuleNav";
 
-const statuses = [
-  { title: "Active", detail: "Student is currently enrolled and usable across operational modules." },
-  { title: "Transferred", detail: "Student moved branch, section, or institution and the current record was closed." },
-  { title: "Graduated", detail: "Student completed the program and remains in history for transcripts and reporting." },
-  { title: "Dropped / Detained", detail: "Administrative lifecycle state with audit visibility and restricted flows." },
-];
+interface StudentRow {
+  id: string;
+  roll_number: string;
+  full_name: string;
+  current_branch_name?: string | null;
+  current_class_name?: string | null;
+  current_section_name?: string | null;
+  current_status?: string | null;
+}
+
+const statuses = ["active", "transferred", "detained", "graduated", "dropped"];
 
 export function StudentStatusPage() {
+  const list = useList<StudentRow>("/students", { page: 1, pageSize: 10, search: "" });
+  const [active, setActive] = useState<StudentRow | null>(null);
+  const [status, setStatus] = useState("active");
+  const [busy, setBusy] = useState(false);
+  const rows = list.data.data;
+
+  const openStatus = (row: StudentRow) => {
+    setActive(row);
+    setStatus(row.current_status || "active");
+  };
+
+  const saveStatus = async () => {
+    if (!active) return;
+    setBusy(true);
+    try {
+      await api.patch(`/students/${active.id}/status`, { status });
+      toast.success("Student status updated");
+      setActive(null);
+      list.refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const columns: Column<StudentRow>[] = [
+    { key: "roll_number", header: "Roll No", cell: (row) => <span className="font-mono text-xs">{row.roll_number}</span> },
+    { key: "full_name", header: "Student", cell: (row) => <span className="font-medium">{row.full_name}</span> },
+    { key: "class", header: "Class", cell: (row) => `${row.current_class_name || "-"} / ${row.current_section_name || "-"}` },
+    { key: "branch", header: "Branch", cell: (row) => row.current_branch_name || "-" },
+    { key: "current_status", header: "Status", cell: (row) => <StatusBadge value={row.current_status || "active"} /> },
+  ];
+
   return (
     <div>
-      <PageHeader
-        title="Student Status"
-        description="Define lifecycle states and how each student moves through the institution."
-      />
+      <PageHeader title="Student Status" description="Manage active, transferred, detained, graduated, and dropped lifecycle states." />
       <StudentModuleNav />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Lifecycle States" value={4} icon={ShieldAlert} trend="Active, transferred, graduated, dropped" />
-        <StatCard label="Transitions" value="Controlled" icon={RefreshCcw} accent="blue" trend="Driven from academic record changes" />
-        <StatCard label="Exit Cases" value="Tracked" icon={Ban} accent="amber" trend="No hard delete required for history" />
-        <StatCard label="Completion" value="Supported" icon={GraduationCap} accent="rose" trend="Graduation belongs here" />
+      <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Students" value={list.data.total} icon={ShieldAlert} />
+        <StatCard label="Active Page" value={rows.filter((r) => (r.current_status || "active") === "active").length} icon={RefreshCcw} accent="blue" />
+        <StatCard label="Exit Cases" value={rows.filter((r) => ["transferred", "dropped"].includes(r.current_status || "")).length} icon={Ban} accent="amber" />
+        <StatCard label="Graduated" value={rows.filter((r) => r.current_status === "graduated").length} icon={GraduationCap} accent="rose" />
       </div>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
-        {statuses.map((status) => (
-          <Card key={status.title}>
-            <CardHeader>
-              <CardTitle>{status.title}</CardTitle>
-              <CardDescription>{status.detail}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-lg border border-border/70 bg-background/60 p-3 text-sm text-muted-foreground">
-                This screen should later control who appears in registry, attendance, fees, and certificate workflows.
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <DataTable
+        columns={columns}
+        data={list.data as Paginated<StudentRow>}
+        loading={list.loading}
+        params={list.params as ListParams}
+        onParamsChange={list.setParams}
+        searchPlaceholder="Search student statuses..."
+        rowActions={(row) => <Button size="sm" variant="outline" onClick={() => openStatus(row)}>Update</Button>}
+      />
+
+      <FormModal
+        open={Boolean(active)}
+        onOpenChange={(v) => !v && setActive(null)}
+        title="Update Student Status"
+        description={active ? `${active.full_name} (${active.roll_number})` : undefined}
+        onSubmit={saveStatus}
+        busy={busy}
+        submitLabel="Update Status"
+      >
+        <Select value={status} onValueChange={setStatus}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {statuses.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </FormModal>
     </div>
   );
 }

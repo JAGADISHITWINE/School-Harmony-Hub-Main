@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/services";
@@ -11,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { BulkImportTools } from "@/components/common/BulkImportTools";
 import { useAuth } from "@/store/auth";
 import type { ListParams, Paginated } from "@/types";
 
@@ -109,6 +111,7 @@ function resolveEndpoint(apiResource: string): string {
   const key = (apiResource || "").toLowerCase().trim();
   const map: Record<string, string> = {
     acc: "academic-years",
+    years: "academic-years",
     "academic-year": "academic-years",
     "academic-years": "academic-years",
     courses: "courses",
@@ -150,12 +153,13 @@ function resolveEndpoint(apiResource: string): string {
 // }
 
 function buildTabMeta(item: MenuItem): TabMeta {
+  const labelSlug = item.label.toLowerCase().replace(/\s+/g, "-");
   const segment =
     item.route
       ?.split("/")
       .filter(Boolean)
       .pop()
-      ?.toLowerCase() || "";
+      ?.toLowerCase() || labelSlug;
 
   return {
     value: segment,
@@ -235,6 +239,7 @@ function searchFields(endpoint: string): string[] {
 }
 
 export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }) {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const institutionId = user?.institution_id || "";
   const organizationId = user?.organization_id || "";
@@ -598,16 +603,19 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
         title="Academic Masters"
         description="Configure academic years, courses, branches, subjects, classes and sections."
         actions={
-          <Button onClick={openCreate} disabled={!activeInstitutionId}>
-            <Plus className="mr-2 h-4 w-4" /> New
-          </Button>
+          <>
+            <BulkImportTools resource={effectiveEndpoint} label={activeTabMeta?.label || "Academic"} onImported={refreshActive} />
+            <Button onClick={openCreate} disabled={!activeInstitutionId}>
+              <Plus className="mr-2 h-4 w-4" /> New
+            </Button>
+          </>
         }
       />
 
         <Tabs
           value={activeTab}
           onValueChange={(v) => {
-           window.history.replaceState({}, "", `/academic/${v}`);
+            navigate({ to: `/academic/${v}` as any });
             setActiveTab(v as AcademicTab);
 
             setParams({

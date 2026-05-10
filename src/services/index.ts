@@ -1,2 +1,2 @@
 import "./routes";
-export { api } from "./api";
+export { api, MAX_PAGE_SIZE } from "./api";

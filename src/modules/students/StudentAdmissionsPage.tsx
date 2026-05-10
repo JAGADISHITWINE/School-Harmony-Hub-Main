@@ -1,71 +1,82 @@
-import { ClipboardCheck, FileUser, School2, UserPlus } from "lucide-react";
+import { CalendarDays, Mail, School2, UserPlus } from "lucide-react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { StatCard } from "@/components/common/StatCard";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { DataTable, type Column } from "@/components/common/DataTable";
+import { StatusBadge } from "@/components/common/StatusBadge";
+import { useList } from "@/hooks/use-crud";
+import type { ListParams, Paginated } from "@/types";
 import { StudentModuleNav } from "./StudentModuleNav";
 
-const admissionSteps = [
-  "Create applicant and basic profile",
-  "Capture guardian and contact details",
-  "Assign institution, branch, section and academic year",
-  "Verify documents and confirm admission",
-];
+interface StudentRow {
+  id: string;
+  roll_number: string;
+  full_name: string;
+  email: string;
+  current_branch_name?: string | null;
+  current_class_name?: string | null;
+  current_section_name?: string | null;
+  current_academic_year_label?: string | null;
+  current_status?: string | null;
+  created_at: string;
+}
 
-const nextDeliverables = [
-  "Applicant intake form with draft status",
-  "Admission approval workflow",
-  "Seat availability checks by section",
-  "Admission number generation and audit trail",
-];
+const formatDate = (value?: string | null) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString();
+};
 
 export function StudentAdmissionsPage() {
+  const list = useList<StudentRow>("/students", { page: 1, pageSize: 10, search: "" });
+  const rows = list.data.data;
+
+  const columns: Column<StudentRow>[] = [
+    { key: "roll_number", header: "Roll No", cell: (row) => <span className="font-mono text-xs">{row.roll_number}</span> },
+    {
+      key: "full_name",
+      header: "Student",
+      cell: (row) => (
+        <div>
+          <div className="font-medium">{row.full_name}</div>
+          <div className="flex items-center gap-1 text-xs text-muted-foreground"><Mail className="h-3 w-3" />{row.email}</div>
+        </div>
+      ),
+    },
+    {
+      key: "allocation",
+      header: "Initial Allocation",
+      cell: (row) => (
+        <div className="text-sm">
+          <div>{row.current_branch_name || "-"}</div>
+          <div className="text-xs text-muted-foreground">{row.current_class_name || "-"} / {row.current_section_name || "-"}</div>
+        </div>
+      ),
+    },
+    { key: "current_academic_year_label", header: "Academic Year", cell: (row) => row.current_academic_year_label || "-" },
+    { key: "created_at", header: "Admitted On", cell: (row) => <span className="text-muted-foreground">{formatDate(row.created_at)}</span> },
+    { key: "current_status", header: "Status", cell: (row) => <StatusBadge value={row.current_status || "active"} /> },
+  ];
+
   return (
     <div>
-      <PageHeader
-        title="Student Admissions"
-        description="Handle new admissions, onboarding checks, and initial academic allocation."
-      />
+      <PageHeader title="Student Admissions" description="Live admission list from student onboarding and academic allocation." />
       <StudentModuleNav />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Pipeline Stages" value={4} icon={UserPlus} trend="Lead to confirmed admission" />
-        <StatCard label="Core Inputs" value={5} icon={FileUser} accent="blue" trend="Profile, guardian, branch, section, year" />
-        <StatCard label="Allocation Scope" value="Institution" icon={School2} accent="amber" trend="Branch and section mapped here" />
-        <StatCard label="Checks Pending" value={4} icon={ClipboardCheck} accent="rose" trend="Workflow pieces to implement next" />
+      <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Admitted Students" value={list.data.total} icon={UserPlus} />
+        <StatCard label="Current Page" value={rows.length} icon={CalendarDays} accent="blue" />
+        <StatCard label="Allocated" value={rows.filter((r) => r.current_section_name).length} icon={School2} accent="amber" />
+        <StatCard label="Active" value={rows.filter((r) => (r.current_status || "active") === "active").length} icon={UserPlus} accent="rose" />
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Admission Flow</CardTitle>
-            <CardDescription>The intended student onboarding sequence for this module.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {admissionSteps.map((step, index) => (
-              <div key={step} className="flex items-start gap-3 rounded-lg border border-border/70 bg-background/60 p-3">
-                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                  {index + 1}
-                </div>
-                <p className="text-sm text-foreground">{step}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>What We Add Next</CardTitle>
-            <CardDescription>This screen is ready as a module slot and now needs admission-specific operations.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {nextDeliverables.map((item) => (
-              <div key={item} className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
-                {item}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
+      <DataTable
+        columns={columns}
+        data={list.data as Paginated<StudentRow>}
+        loading={list.loading}
+        params={list.params as ListParams}
+        onParamsChange={list.setParams}
+        searchPlaceholder="Search admissions..."
+      />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { DataTable, type Column } from "@/components/common/DataTable";
 import { FormModal } from "@/components/common/FormModal";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { BulkImportTools } from "@/components/common/BulkImportTools";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -547,6 +548,7 @@ export function TeachersPage() {
         actions={
           canManage && (
             <>
+              <BulkImportTools resource="teachers" label="Teachers" onImported={loadTeachers} />
               <Button variant="outline" onClick={() => selectedTeacher && openClassModal()} disabled={!selectedTeacher}>
                 <Link2 className="mr-2 h-4 w-4" />
                 Link Class

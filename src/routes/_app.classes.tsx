@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AcademicMastersPage } from "@/modules/academic/AcademicMastersPage";
+import { ClassesPage } from "@/modules/classes/ClassesPage";
+
 export const Route = createFileRoute("/_app/classes")({
-  component: () => <AcademicMastersPage initialTab="classes" />,
+  component: ClassesPage,
 });

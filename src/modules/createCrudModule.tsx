@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { DataTable, type Column } from "@/components/common/DataTable";
 import { FormModal } from "@/components/common/FormModal";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { BulkImportTools } from "@/components/common/BulkImportTools";
 import { useList, useMutate } from "@/hooks/use-crud";
 import { useAuth } from "@/store/auth";
 import type { Permission } from "@/types";
@@ -26,6 +27,7 @@ interface ModuleConfig<T extends { id: string }, V extends FieldValues> {
   transform?: (values: V, mode: "create" | "edit", row: T | null) => any;
   permissions?: { view?: Permission; manage?: Permission };
   selectable?: boolean;
+  bulkResource?: string;
 }
 
 export function createCrudModule<T extends { id: string }, V extends FieldValues>(cfg: ModuleConfig<T, V>) {
@@ -65,9 +67,12 @@ export function createCrudModule<T extends { id: string }, V extends FieldValues
           title={cfg.title}
           description={cfg.description}
           actions={canManage && (
-            <Button onClick={openCreate}>
-              <Plus className="h-4 w-4 mr-2" /> New {cfg.singular}
-            </Button>
+            <>
+              {cfg.bulkResource && <BulkImportTools resource={cfg.bulkResource} label={cfg.singular} onImported={refresh} />}
+              <Button onClick={openCreate}>
+                <Plus className="h-4 w-4 mr-2" /> New {cfg.singular}
+              </Button>
+            </>
           )}
         />
 

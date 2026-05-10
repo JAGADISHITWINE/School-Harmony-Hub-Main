@@ -1,71 +1,76 @@
-import { z } from "zod";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { createCrudModule } from "@/modules/createCrudModule";
-import { Field, FieldGrid } from "@/components/common/FormFields";
+import { Bell, Mail, MessageSquare, RefreshCw } from "lucide-react";
+import { PageHeader } from "@/components/common/PageHeader";
+import { DataTable, type Column } from "@/components/common/DataTable";
+import { StatCard } from "@/components/common/StatCard";
 import { StatusBadge } from "@/components/common/StatusBadge";
-import { zResolver } from "@/modules/zodResolver";
-import type { NotificationRecord } from "@/types";
+import { Button } from "@/components/ui/button";
+import { useList } from "@/hooks/use-crud";
 
-const schema = z.object({
-  title: z.string().trim().min(2).max(120),
-  message: z.string().trim().min(2).max(1000),
-  channel: z.enum(["email","sms","both"]),
-  audience: z.string().trim().min(2).max(80),
-  status: z.enum(["sent","draft","failed"]),
-  sentAt: z.string().min(1),
-});
-type V = z.infer<typeof schema>;
+interface NotificationLogRow {
+  id: string;
+  channel: "email" | "sms";
+  recipient?: string | null;
+  subject?: string | null;
+  body?: string | null;
+  status: "pending" | "sent" | "failed" | "skipped";
+  provider?: string | null;
+  error_message?: string | null;
+  created_at: string;
+}
 
-export const NotificationsModule = createCrudModule<NotificationRecord, V>({
-  base: "/notifications",
-  title: "Notifications",
-  description: "Send broadcasts via email or SMS and view delivery history.",
-  singular: "Message",
-  selectable: true,
-  permissions: { view: "notifications.view", manage: "notifications.manage" },
-  resolver: zResolver(schema),
-  defaultValues: { title: "", message: "", channel: "email", audience: "All Parents", status: "draft", sentAt: new Date().toISOString().slice(0,10) },
-  toFormValues: (n) => ({ title: n.title, message: n.message, channel: n.channel, audience: n.audience, status: n.status, sentAt: n.sentAt }),
-  columns: [
-    { key: "title", header: "Title", sortable: true, cell: (r) => <span className="font-medium">{r.title}</span> },
-    { key: "audience", header: "Audience", sortable: true, cell: (r) => r.audience },
-    { key: "channel", header: "Channel", cell: (r) => <span className="capitalize">{r.channel}</span> },
-    { key: "sentAt", header: "Date", sortable: true, cell: (r) => <span className="text-muted-foreground">{r.sentAt}</span> },
-    { key: "status", header: "Status", cell: (r) => <StatusBadge value={r.status} /> },
-  ],
-  renderForm: (form) => {
-    const { register, watch, setValue, formState: { errors } } = form;
-    return (
-      <div className="space-y-4">
-        <Field label="Title" error={errors.title?.message as string}><Input {...register("title")} /></Field>
-        <Field label="Message" error={errors.message?.message as string}><Textarea rows={5} {...register("message")} /></Field>
-        <FieldGrid>
-          <Field label="Audience" error={errors.audience?.message as string}><Input {...register("audience")} /></Field>
-          <Field label="Date"><Input type="date" {...register("sentAt")} /></Field>
-          <Field label="Channel">
-            <Select value={watch("channel")} onValueChange={(v)=>setValue("channel", v as any, { shouldValidate: true })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="email">Email</SelectItem>
-                <SelectItem value="sms">SMS</SelectItem>
-                <SelectItem value="both">Email + SMS</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Status">
-            <Select value={watch("status")} onValueChange={(v)=>setValue("status", v as any, { shouldValidate: true })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="sent">Sent</SelectItem>
-                <SelectItem value="failed">Failed</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-        </FieldGrid>
+const formatDate = (value?: string | null) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString();
+};
+
+export function NotificationsModule() {
+  const { params, setParams, data, loading, refresh } = useList<NotificationLogRow>("/notifications", { page: 1, pageSize: 20 });
+  const rows = data.data;
+  const emailCount = rows.filter((row) => row.channel === "email").length;
+  const smsCount = rows.filter((row) => row.channel === "sms").length;
+  const failedCount = rows.filter((row) => row.status === "failed").length;
+
+  const columns: Column<NotificationLogRow>[] = [
+    {
+      key: "subject",
+      header: "Message",
+      cell: (row) => (
+        <div>
+          <div className="font-medium">{row.subject || "Attendance alert"}</div>
+          <div className="max-w-xl truncate text-xs text-muted-foreground">{row.body || row.error_message || "-"}</div>
+        </div>
+      ),
+    },
+    { key: "channel", header: "Channel", cell: (row) => <span className="capitalize">{row.channel}</span> },
+    { key: "recipient", header: "Recipient", cell: (row) => row.recipient || "-" },
+    { key: "provider", header: "Provider", cell: (row) => row.provider || "-" },
+    { key: "status", header: "Status", cell: (row) => <StatusBadge value={row.status} /> },
+    { key: "created_at", header: "Created", cell: (row) => <span className="text-muted-foreground">{formatDate(row.created_at)}</span> },
+  ];
+
+  return (
+    <div>
+      <PageHeader
+        title="Notifications"
+        description="Email and SMS delivery logs generated by attendance and college workflows."
+        actions={<Button variant="outline" onClick={refresh}><RefreshCw className="mr-2 h-4 w-4" /> Refresh</Button>}
+      />
+
+      <div className="mb-6 grid gap-4 md:grid-cols-3">
+        <StatCard label="Email Logs" value={emailCount} icon={Mail} accent="primary" />
+        <StatCard label="SMS Logs" value={smsCount} icon={MessageSquare} accent="blue" />
+        <StatCard label="Failed" value={failedCount} icon={Bell} accent="rose" />
       </div>
-    );
-  },
-});
+
+      <DataTable
+        columns={columns}
+        data={data}
+        loading={loading}
+        params={params}
+        onParamsChange={setParams}
+        searchPlaceholder="Search notifications..."
+      />
+    </div>
+  );
+}

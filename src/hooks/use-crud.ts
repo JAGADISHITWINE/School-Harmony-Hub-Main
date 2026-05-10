@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api } from "@/services";
+import { api, MAX_PAGE_SIZE } from "@/services";
 import type { ListParams, Paginated } from "@/types";
 import { toast } from "sonner";
 
@@ -9,7 +9,7 @@ function toQueryString(params: ListParams) {
   const q = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
     if (v === undefined || v === null || v === "") return;
-    if (k === "pageSize") q.set("page_size", String(v));
+    if (k === "pageSize") q.set("page_size", String(Math.min(Number(v), MAX_PAGE_SIZE)));
     else q.set(k, String(v));
   });
   const s = q.toString();

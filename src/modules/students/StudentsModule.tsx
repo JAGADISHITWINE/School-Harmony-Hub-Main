@@ -23,6 +23,7 @@ interface BackendStudent {
   gender?: string | null;
   guardian_name?: string | null;
   guardian_phone?: string | null;
+  guardian_email?: string | null;
   full_name: string;
   email: string;
   role_slug?: string | null;
@@ -81,6 +82,7 @@ const schema = z.object({
   gender: z.string().optional().or(z.literal("")),
   guardian_name: z.string().trim().max(120).optional().or(z.literal("")),
   guardian_phone: z.string().trim().max(20).optional().or(z.literal("")),
+  guardian_email: z.string().trim().email("Invalid email").optional().or(z.literal("")),
 });
 
 type V = z.infer<typeof schema>;
@@ -108,6 +110,7 @@ export const StudentsModule = createCrudModule<BackendStudent, V>({
   singular: "Student",
   searchPlaceholder: "Search by name, email or roll number…",
   selectable: false,
+  bulkResource: "students",
   permissions: { view: "students.view", manage: "students.manage" },
   resolver: zResolver(schema),
   defaultValues: {
@@ -127,6 +130,7 @@ export const StudentsModule = createCrudModule<BackendStudent, V>({
     gender: "",
     guardian_name: "",
     guardian_phone: "",
+    guardian_email: "",
   },
   toFormValues: (row) => ({
     institution_id: "",
@@ -145,6 +149,7 @@ export const StudentsModule = createCrudModule<BackendStudent, V>({
     gender: row.gender || "",
     guardian_name: row.guardian_name || "",
     guardian_phone: row.guardian_phone || "",
+    guardian_email: row.guardian_email || "",
   }),
   transform: (values, mode) => {
     if (mode === "edit") {
@@ -155,6 +160,7 @@ export const StudentsModule = createCrudModule<BackendStudent, V>({
         gender: values.gender || null,
         guardian_name: values.guardian_name || null,
         guardian_phone: values.guardian_phone || null,
+        guardian_email: values.guardian_email || null,
       };
     }
 
@@ -173,6 +179,7 @@ export const StudentsModule = createCrudModule<BackendStudent, V>({
       gender: values.gender || null,
       guardian_name: values.guardian_name || null,
       guardian_phone: values.guardian_phone || null,
+      guardian_email: values.guardian_email || null,
     };
   },
   columns: [
@@ -201,6 +208,7 @@ export const StudentsModule = createCrudModule<BackendStudent, V>({
         <div className="text-sm">
           <div>{r.guardian_name || "-"}</div>
           <div className="text-xs text-muted-foreground">{r.guardian_phone || "-"}</div>
+          <div className="text-xs text-muted-foreground">{r.guardian_email || "-"}</div>
         </div>
       ),
     },
@@ -485,6 +493,9 @@ export const StudentsModule = createCrudModule<BackendStudent, V>({
         <Field label="Guardian Phone" error={errors.guardian_phone?.message as string}>
           <Input {...register("guardian_phone")} />
         </Field>
+        <Field label="Guardian Email" error={errors.guardian_email?.message as string}>
+          <Input type="email" {...register("guardian_email")} />
+        </Field>
       </FieldGrid>
     );
   },
@@ -496,6 +507,7 @@ export const StudentsModule = createCrudModule<BackendStudent, V>({
       <div><dt className="text-xs uppercase text-muted-foreground">Gender</dt><dd className="text-sm mt-1">{row.gender || "-"}</dd></div>
       <div><dt className="text-xs uppercase text-muted-foreground">Guardian</dt><dd className="text-sm mt-1">{row.guardian_name || "-"}</dd></div>
       <div><dt className="text-xs uppercase text-muted-foreground">Guardian Phone</dt><dd className="text-sm mt-1">{row.guardian_phone || "-"}</dd></div>
+      <div><dt className="text-xs uppercase text-muted-foreground">Guardian Email</dt><dd className="text-sm mt-1">{row.guardian_email || "-"}</dd></div>
       <div><dt className="text-xs uppercase text-muted-foreground">User Type</dt><dd className="text-sm mt-1 capitalize">{row.role_slug || "student"}</dd></div>
       <div><dt className="text-xs uppercase text-muted-foreground">Branch</dt><dd className="text-sm mt-1">{row.current_branch_name || "-"}</dd></div>
       <div><dt className="text-xs uppercase text-muted-foreground">Class</dt><dd className="text-sm mt-1">{row.current_class_name || "-"}</dd></div>
