@@ -55,9 +55,12 @@ export function createCrudModule<T extends { id: string }, V extends FieldValues
     const openView = (row: T) => { setActive(row); setMode("view"); };
 
     const handleSubmit = form.handleSubmit(async (values) => {
+      if (busy) return;
       const payload = cfg.transform ? cfg.transform(values, mode === "edit" ? "edit" : "create", active) : values;
       if (mode === "create") await create(payload);
       else if (mode === "edit" && active) await update(active.id, payload);
+      form.reset(cfg.defaultValues);
+      setActive(null);
       setMode(null);
     });
 

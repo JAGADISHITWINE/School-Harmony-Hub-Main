@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
+import { SearchableSelect } from "@/components/common/SearchableSelect";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,6 +13,9 @@ import { api } from "@/services";
 import { toast } from "sonner";
 
 type Option = { id: string; name: string };
+type ScopedClassOption = Option & { branch_id?: string; branch_name?: string; semester?: number | null; year_no?: number | null };
+type ScopedSectionOption = Option & { class_id?: string; class_name?: string };
+type ScopedSubjectOption = Option & { class_id?: string; branch_id?: string | null; section_id?: string; code?: string };
 type AcademicYear = { id: string; label: string };
 type Teacher = { id: string; full_name: string; designation?: string | null; employee_code: string };
 type TimetableSlot = {
@@ -36,6 +40,16 @@ type TimetableSlot = {
 type MergedSlot = TimetableSlot & { teacher_name: string; teacher_designation: string };
 
 const days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+const defaultSlotForm = {
+  academic_year_id: "",
+  class_id: "",
+  section_id: "",
+  subject_id: "",
+  day_of_week: "monday",
+  start_time: "09:00",
+  end_time: "10:00",
+  room_no: "",
+};
 
 const listFrom = <T,>(payload: any): T[] =>
   (Array.isArray(payload?.data?.items) && payload.data.items) ||
@@ -87,28 +101,33 @@ export function TimetableModule() {
   const [reassignTargetTeacherId, setReassignTargetTeacherId] = useState("");
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [subjectOptions, setSubjectOptions] = useState<Option[]>([]);
-  const [form, setForm] = useState({
-    academic_year_id: "",
-    class_id: "",
-    section_id: "",
-    subject_id: "",
-    day_of_week: "monday",
-    start_time: "09:00",
-    end_time: "10:00",
-    room_no: "",
-  });
+  const [createBranchId, setCreateBranchId] = useState("");
+  const [createBranches, setCreateBranches] = useState<Option[]>([]);
+  const [createClasses, setCreateClasses] = useState<ScopedClassOption[]>([]);
+  const [createSections, setCreateSections] = useState<ScopedSectionOption[]>([]);
+  const [createSubjects, setCreateSubjects] = useState<ScopedSubjectOption[]>([]);
+  const [slotSaving, setSlotSaving] = useState(false);
+  const [form, setForm] = useState(defaultSlotForm);
   const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
 
   const loadBase = async () => {
     if (!user?.institution_id) return;
     try {
       const [yRes, cRes] = await Promise.all([
-        api.get<any>(`/academic-years?institution_id=${user.institution_id}&page=1&page_size=100`),
-        api.get<any>(`/courses?institution_id=${user.institution_id}&page=1&page_size=100`),
+        api.get<any>(`/academic-years?institution_id=${user.institution_id}&page=1&page_size=500`),
+        api.get<any>(`/courses?institution_id=${user.institution_id}&page=1&page_size=500`),
       ]);
       setYears(listFrom<any>(yRes).map((x) => ({ id: x.id, label: x.label })));
       setCourses(listFrom<any>(cRes).map((x) => ({ id: x.id, name: x.name })));
-      const tRes = await api.get<any>("/teachers?page=1&page_size=100");
+      const [tRes, bRes, classRes, sectionRes] = await Promise.all([
+        api.get<any>("/teachers?page=1&page_size=500"),
+        api.get<any>("/branches?page=1&page_size=500"),
+        api.get<any>("/classes?page=1&page_size=500"),
+        api.get<any>("/sections?page=1&page_size=500"),
+      ]);
+      setBranches(listFrom<any>(bRes).map((x) => ({ id: x.id, name: x.name })));
+      setClasses(listFrom<any>(classRes).map((x) => ({ id: x.id, name: x.name })));
+      setSections(listFrom<any>(sectionRes).map((x) => ({ id: x.id, name: x.name })));
       const tRows = listFrom<Teacher>(tRes);
       setTeachers(tRows);
       setTeacherId(tRows[0]?.id || "");
@@ -123,15 +142,12 @@ export function TimetableModule() {
   }, [user?.institution_id]);
 
   useEffect(() => {
-    if (!courseId) {
-      setBranches([]);
-      setBranchId("");
-      return;
-    }
     (async () => {
       try {
-        const res = await api.get<any>(`/branches?course_id=${courseId}&page=1&page_size=100`);
+        const query = courseId ? `?course_id=${courseId}&page=1&page_size=500` : "?page=1&page_size=500";
+        const res = await api.get<any>(`/branches${query}`);
         setBranches(listFrom<any>(res).map((x) => ({ id: x.id, name: x.name })));
+        if (courseId) setBranchId("");
       } catch (e: any) {
         toast.error(e?.message || "Failed to load branches");
       }
@@ -139,31 +155,27 @@ export function TimetableModule() {
   }, [courseId]);
 
   useEffect(() => {
-    if (!branchId) {
-      setClasses([]);
-      setClassId("");
-      return;
-    }
     (async () => {
       try {
-        const res = await api.get<any>(`/classes?branch_id=${branchId}&page=1&page_size=100`);
+        const params = new URLSearchParams({ page: "1", page_size: "500" });
+        if (courseId) params.set("course_id", courseId);
+        if (branchId) params.set("branch_id", branchId);
+        const res = await api.get<any>(`/classes?${params.toString()}`);
         setClasses(listFrom<any>(res).map((x) => ({ id: x.id, name: x.name })));
+        if (branchId) setClassId("");
       } catch (e: any) {
         toast.error(e?.message || "Failed to load classes");
       }
     })();
-  }, [branchId]);
+  }, [courseId, branchId]);
 
   useEffect(() => {
-    if (!classId) {
-      setSections([]);
-      setSectionId("");
-      return;
-    }
     (async () => {
       try {
-        const res = await api.get<any>(`/sections?class_id=${classId}&page=1&page_size=100`);
+        const query = classId ? `?class_id=${classId}&page=1&page_size=500` : "?page=1&page_size=500";
+        const res = await api.get<any>(`/sections${query}`);
         setSections(listFrom<any>(res).map((x) => ({ id: x.id, name: x.name })));
+        if (classId) setSectionId("");
       } catch (e: any) {
         toast.error(e?.message || "Failed to load sections");
       }
@@ -177,13 +189,77 @@ export function TimetableModule() {
     }
     (async () => {
       try {
-        const res = await api.get<any>(`/subjects?class_id=${classId}&page=1&page_size=100`);
+        const res = await api.get<any>(`/subjects?class_id=${classId}&page=1&page_size=500`);
         setSubjectOptions(listFrom<any>(res).map((x) => ({ id: x.id, name: x.name })));
       } catch (e: any) {
         toast.error(e?.message || "Failed to load subjects");
       }
     })();
   }, [classId]);
+
+  const loadTeacherScope = async (next: { branchId?: string; classId?: string; sectionId?: string } = {}) => {
+    if (!teacherId) {
+      setCreateBranches([]);
+      setCreateClasses([]);
+      setCreateSections([]);
+      setCreateSubjects([]);
+      return;
+    }
+    const params = new URLSearchParams();
+    if (next.branchId) params.set("branch_id", next.branchId);
+    if (next.classId) params.set("class_id", next.classId);
+    if (next.sectionId) params.set("section_id", next.sectionId);
+    const suffix = params.toString() ? `?${params.toString()}` : "";
+    const res = await api.get<any>(`/teachers/${teacherId}/teaching-scope${suffix}`);
+    const data = res?.data || {};
+    setCreateBranches((data.branches || []).map((x: any) => ({ id: x.id, name: x.name })));
+    setCreateClasses(!next.branchId ? [] : (data.classes || []).map((x: any) => ({
+      id: x.id,
+      name: [x.name, x.branch_name].filter(Boolean).join(" - "),
+      branch_id: x.branch_id,
+      branch_name: x.branch_name,
+      semester: x.semester,
+      year_no: x.year_no,
+    })));
+    setCreateSections(!next.classId ? [] : (data.sections || []).map((x: any) => ({
+      id: x.id,
+      name: [x.name, x.class_name].filter(Boolean).join(" - "),
+      class_id: x.class_id,
+      class_name: x.class_name,
+    })));
+    setCreateSubjects(!next.sectionId ? [] : (data.subjects || []).map((x: any) => ({
+      id: x.id,
+      name: x.code ? `${x.name} (${x.code})` : x.name,
+      class_id: x.class_id,
+      branch_id: x.branch_id,
+      section_id: x.section_id,
+      code: x.code,
+    })));
+  };
+
+  useEffect(() => {
+    setCreateBranchId("");
+    setForm((p) => ({ ...p, class_id: "", section_id: "", subject_id: "" }));
+    loadTeacherScope().catch((e: any) => toast.error(e?.message || "Failed to load teacher mappings"));
+  }, [teacherId]);
+
+  useEffect(() => {
+    if (!teacherId || !createBranchId) return;
+    setForm((p) => ({ ...p, class_id: "", section_id: "", subject_id: "" }));
+    loadTeacherScope({ branchId: createBranchId }).catch((e: any) => toast.error(e?.message || "Failed to load teacher classes"));
+  }, [createBranchId]);
+
+  useEffect(() => {
+    if (!teacherId || !form.class_id) return;
+    setForm((p) => ({ ...p, section_id: "", subject_id: "" }));
+    loadTeacherScope({ branchId: createBranchId, classId: form.class_id }).catch((e: any) => toast.error(e?.message || "Failed to load teacher sections"));
+  }, [form.class_id]);
+
+  useEffect(() => {
+    if (!teacherId || !form.section_id) return;
+    setForm((p) => ({ ...p, subject_id: "" }));
+    loadTeacherScope({ branchId: createBranchId, classId: form.class_id, sectionId: form.section_id }).catch((e: any) => toast.error(e?.message || "Failed to load teacher subjects"));
+  }, [form.section_id]);
 
   const loadTimetable = async () => {
     setLoading(true);
@@ -198,26 +274,12 @@ export function TimetableModule() {
         setSlots(rows);
         return;
       }
-      const teachersRes = await api.get<any>("/teachers?page=1&page_size=100");
-      const teachers = listFrom<Teacher>(teachersRes);
-
-      const timetableResults = await Promise.all(
-        teachers.map(async (teacher) => {
-          try {
-            const res = await api.get<any>(`/teachers/${teacher.id}/timetable`);
-            const rows = listFrom<TimetableSlot>(res);
-            return rows.map((slot) => ({
-              ...slot,
-              teacher_name: teacher.full_name,
-              teacher_designation: (teacher.designation || "Teacher").toUpperCase(),
-            }));
-          } catch {
-            return [] as MergedSlot[];
-          }
-        })
-      );
-
-      setSlots(timetableResults.flat());
+      const res = await api.get<any>("/teachers/timetable/all");
+      const rows = listFrom<any>(res).map((slot) => ({
+        ...slot,
+        teacher_designation: (slot.teacher_designation || "Teacher").toUpperCase(),
+      }));
+      setSlots(rows);
     } catch (e: any) {
       toast.error(e?.message || "Failed to load timetable");
       setSlots([]);
@@ -231,10 +293,12 @@ export function TimetableModule() {
   }, [isTeacher, user?.name]);
 
   const createSlot = async () => {
+    if (slotSaving) return;
     if (!teacherId || !form.academic_year_id || !form.class_id || !form.section_id || !form.subject_id) {
       toast.error("Fill required fields");
       return;
     }
+    setSlotSaving(true);
     try {
       if (editingSlotId) {
         await api.patch(`/teachers/timetable/${editingSlotId}`, form);
@@ -243,11 +307,19 @@ export function TimetableModule() {
         await api.post(`/teachers/${teacherId}/timetable`, form);
         toast.success("Timetable slot created");
       }
-      setForm((p) => ({ ...p, section_id: "", subject_id: "", room_no: "" }));
+      setForm(defaultSlotForm);
+      setTeacherId("");
+      setCreateBranchId("");
+      setCreateBranches([]);
+      setCreateClasses([]);
+      setCreateSections([]);
+      setCreateSubjects([]);
       setEditingSlotId(null);
       await loadTimetable();
     } catch (e: any) {
       toast.error(e?.message || "Failed to create slot");
+    } finally {
+      setSlotSaving(false);
     }
   };
 
@@ -255,6 +327,7 @@ export function TimetableModule() {
     setTab("create");
     setEditingSlotId(slot.id);
     setTeacherId(slot.teacher_id);
+    setCreateBranchId(slot.branch_id);
     setClassId(slot.class_id);
     setForm({
       academic_year_id: slot.academic_year_id,
@@ -461,7 +534,22 @@ export function TimetableModule() {
           </div>
         </div>
         <div className="flex items-end">
-          <Button variant="outline" onClick={loadTimetable}>Refresh Timetable</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={loadTimetable}>Refresh Timetable</Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setYearId("");
+                setCourseId("");
+                setBranchId("");
+                setClassId("");
+                setSectionId("");
+                setSearch("");
+              }}
+            >
+              Clear Filters
+            </Button>
+          </div>
         </div>
         {!isTeacher && (
           <div>
@@ -605,38 +693,70 @@ export function TimetableModule() {
         <Card className="p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
             <Label>Teacher / HOD</Label>
-            <Select value={teacherId} onValueChange={setTeacherId}>
-              <SelectTrigger><SelectValue placeholder="Select teacher" /></SelectTrigger>
-              <SelectContent>{teachers.map((t) => <SelectItem key={t.id} value={t.id}>{t.full_name} ({t.employee_code})</SelectItem>)}</SelectContent>
-            </Select>
+            <SearchableSelect
+              value={teacherId}
+              onValueChange={setTeacherId}
+              placeholder="Select teacher"
+              searchPlaceholder="Search teacher..."
+              options={teachers.map((t) => ({
+                value: t.id,
+                label: `${t.full_name} (${t.employee_code})`,
+                search: `${t.full_name} ${t.employee_code}`,
+              }))}
+            />
           </div>
           <div>
             <Label>Academic Year</Label>
-            <Select value={form.academic_year_id} onValueChange={(v) => setForm((p) => ({ ...p, academic_year_id: v }))}>
-              <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
-              <SelectContent>{years.map((y) => <SelectItem key={y.id} value={y.id}>{y.label}</SelectItem>)}</SelectContent>
-            </Select>
+            <SearchableSelect
+              value={form.academic_year_id}
+              onValueChange={(v) => setForm((p) => ({ ...p, academic_year_id: v }))}
+              placeholder="Select year"
+              searchPlaceholder="Search year..."
+              options={years.map((y) => ({ value: y.id, label: y.label }))}
+            />
+          </div>
+          <div>
+            <Label>Branch</Label>
+            <SearchableSelect
+              value={createBranchId}
+              onValueChange={setCreateBranchId}
+              placeholder="Select teacher branch"
+              searchPlaceholder="Search branch..."
+              options={createBranches.map((b) => ({ value: b.id, label: b.name }))}
+            />
           </div>
           <div>
             <Label>Class</Label>
-            <Select value={form.class_id} onValueChange={(v) => { setForm((p) => ({ ...p, class_id: v, section_id: "", subject_id: "" })); setClassId(v); }}>
-              <SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger>
-              <SelectContent>{classes.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-            </Select>
+            <SearchableSelect
+              disabled={!createBranchId}
+              value={form.class_id}
+              onValueChange={(v) => { setForm((p) => ({ ...p, class_id: v, section_id: "", subject_id: "" })); setClassId(v); }}
+              placeholder="Select class"
+              searchPlaceholder="Search class..."
+              options={createClasses.map((c) => ({ value: c.id, label: c.name }))}
+            />
           </div>
           <div>
             <Label>Section</Label>
-            <Select value={form.section_id} onValueChange={(v) => setForm((p) => ({ ...p, section_id: v }))}>
-              <SelectTrigger><SelectValue placeholder="Select section" /></SelectTrigger>
-              <SelectContent>{sections.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-            </Select>
+            <SearchableSelect
+              disabled={!form.class_id}
+              value={form.section_id}
+              onValueChange={(v) => setForm((p) => ({ ...p, section_id: v }))}
+              placeholder="Select section"
+              searchPlaceholder="Search section..."
+              options={createSections.map((s) => ({ value: s.id, label: s.name }))}
+            />
           </div>
           <div>
             <Label>Subject</Label>
-            <Select value={form.subject_id} onValueChange={(v) => setForm((p) => ({ ...p, subject_id: v }))}>
-              <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
-              <SelectContent>{subjectOptions.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-            </Select>
+            <SearchableSelect
+              disabled={!form.section_id}
+              value={form.subject_id}
+              onValueChange={(v) => setForm((p) => ({ ...p, subject_id: v }))}
+              placeholder="Select subject"
+              searchPlaceholder="Search subject..."
+              options={createSubjects.map((s) => ({ value: s.id, label: s.name, search: `${s.name} ${s.code || ""}` }))}
+            />
           </div>
           <div>
             <Label>Day</Label>
@@ -658,7 +778,9 @@ export function TimetableModule() {
             <Input value={form.room_no} onChange={(e) => setForm((p) => ({ ...p, room_no: e.target.value }))} />
           </div>
           <div className="md:col-span-4 flex justify-end">
-            <Button onClick={createSlot}>{editingSlotId ? "Update Slot" : "Create Slot"}</Button>
+            <Button onClick={createSlot} disabled={slotSaving}>
+              {slotSaving ? "Saving..." : editingSlotId ? "Update Slot" : "Create Slot"}
+            </Button>
             {editingSlotId && (
               <Button variant="outline" className="ml-2" onClick={cancelEditSlot}>
                 Cancel Edit

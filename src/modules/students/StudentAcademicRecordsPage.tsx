@@ -165,7 +165,7 @@ export function StudentAcademicRecordsPage() {
     const loadStudents = async () => {
       setLoading(true);
       try {
-        const res = await api.get<any>("/students?page=1&page_size=100");
+        const res = await api.get<any>("/students?page=1&page_size=500");
         const rows = ((Array.isArray(res?.data?.items) && res.data.items) || []) as BackendStudent[];
         if (!cancelled) setStudents(rows);
       } catch {
@@ -186,8 +186,8 @@ export function StudentAcademicRecordsPage() {
     const loadBaseOptions = async () => {
       try {
         const [yearsRes, coursesRes] = await Promise.all([
-          api.get<any>(`/academic-years?institution_id=${user.institution_id}&page=1&page_size=100`),
-          api.get<any>(`/courses?institution_id=${user.institution_id}&page=1&page_size=100`),
+          api.get<any>(`/academic-years?institution_id=${user.institution_id}&page=1&page_size=500`),
+          api.get<any>(`/courses?institution_id=${user.institution_id}&page=1&page_size=500`),
         ]);
         if (cancelled) return;
         const nextYears = ((Array.isArray(yearsRes?.data?.items) && yearsRes.data.items) || []) as AcademicYearOption[];
@@ -223,7 +223,7 @@ export function StudentAcademicRecordsPage() {
     let cancelled = false;
     const loadBranches = async () => {
       try {
-        const res = await api.get<any>(`/branches?course_id=${courseId}&page=1&page_size=100`);
+        const res = await api.get<any>(`/branches?course_id=${courseId}&page=1&page_size=500`);
         if (cancelled) return;
         const rows = ((Array.isArray(res?.data?.items) && res.data.items) || []) as BranchOption[];
         setBranches(rows);
@@ -259,7 +259,7 @@ export function StudentAcademicRecordsPage() {
     let cancelled = false;
     const loadClasses = async () => {
       try {
-        const res = await api.get<any>(`/classes?branch_id=${branchId}&page=1&page_size=100`);
+        const res = await api.get<any>(`/classes?branch_id=${branchId}&page=1&page_size=500`);
         if (cancelled) return;
         const rows = ((Array.isArray(res?.data?.items) && res.data.items) || []) as ClassOption[];
         setClasses(rows);
@@ -290,7 +290,7 @@ export function StudentAcademicRecordsPage() {
     let cancelled = false;
     const loadSections = async () => {
       try {
-        const res = await api.get<any>(`/sections?class_id=${classId}&page=1&page_size=100`);
+        const res = await api.get<any>(`/sections?class_id=${classId}&page=1&page_size=500`);
         if (cancelled) return;
         const rows = ((Array.isArray(res?.data?.items) && res.data.items) || []) as SectionOption[];
         setSections(rows);
@@ -415,7 +415,7 @@ export function StudentAcademicRecordsPage() {
       toast.success("Academic record added");
       closeRecordModal(false);
       setLoading(true);
-      const res = await api.get<any>("/students?page=1&page_size=100");
+      const res = await api.get<any>("/students?page=1&page_size=500");
       const rows = ((Array.isArray(res?.data?.items) && res.data.items) || []) as BackendStudent[];
       setStudents(rows);
     } catch {

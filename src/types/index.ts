@@ -2,16 +2,7 @@ export type ID = string;
 
 export type Role = "super_admin" | "admin" | "principal" | "hod" | "teacher" | "accountant" | "student";
 
-export type Permission =
-  | "users.view" | "users.manage"
-  | "roles.view" | "roles.manage"
-  | "menus.view" | "menus.manage"
-  | "students.view" | "students.manage"
-  | "staff.view" | "staff.manage"
-  | "classes.view" | "classes.manage"
-  | "attendance.view" | "attendance.manage"
-  | "fees.view" | "fees.manage"
-  | "notifications.view" | "notifications.manage";
+export type Permission = string;
 
 export interface User {
   id: ID;

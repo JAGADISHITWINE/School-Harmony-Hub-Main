@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/select";
 import { createCrudModule } from "@/modules/createCrudModule";
 import { Field, FieldGrid } from "@/components/common/FormFields";
+import { SearchableSelect } from "@/components/common/SearchableSelect";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { zResolver } from "@/modules/zodResolver";
 import { api } from "@/services";
@@ -123,16 +124,25 @@ export const UsersModule = createCrudModule<BackendUser, V>({
     status: u.is_active ? "active" : "inactive",
   }),
 
-  transform: (values) => ({
-    full_name: values.full_name,
-    phone: values.phone,
-    email: values.email,
-    username: values.username,
-    password: values.password || undefined,
-    role_id: values.role_id,
-    institution_id: values.institution_id,
-    is_active: values.status === "active",
-  }),
+  transform: (values, mode) => {
+    const payload: any = {
+      full_name: values.full_name,
+      phone: values.phone,
+      role_id: values.role_id,
+      institution_id: values.institution_id,
+      is_active: values.status === "active",
+    };
+
+    if (mode === "create") {
+      payload.email = values.email;
+      payload.username = values.username;
+      payload.password = values.password || undefined;
+    } else if (values.password) {
+      payload.password = values.password;
+    }
+
+    return payload;
+  },
 
   /* =========================
      TABLE
@@ -304,30 +314,14 @@ export const UsersModule = createCrudModule<BackendUser, V>({
 
         {/* ROLE */}
         <Field label="Role" error={errors.role_id?.message as string}>
-          <Select
+          <SearchableSelect
             value={watch("role_id") || ""}
-            onValueChange={(v) =>
-              setValue("role_id", v, { shouldValidate: true })
-            }
+            onValueChange={(v) => setValue("role_id", v, { shouldValidate: true })}
             disabled={loadingRoles}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select role" />
-            </SelectTrigger>
-            <SelectContent>
-              {roles.length === 0 ? (
-                <SelectItem value="none" disabled>
-                  No roles found
-                </SelectItem>
-              ) : (
-                roles.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>
-                    {r.name}
-                  </SelectItem>
-                ))
-              )}
-            </SelectContent>
-          </Select>
+            placeholder="Select role"
+            searchPlaceholder="Search role..."
+            options={roles.map((r) => ({ value: r.id, label: r.name }))}
+          />
         </Field>
 
         {/* INSTITUTION */}
@@ -335,32 +329,14 @@ export const UsersModule = createCrudModule<BackendUser, V>({
           label="Institution"
           error={errors.institution_id?.message as string}
         >
-          <Select
+          <SearchableSelect
             value={watch("institution_id") || ""}
-            onValueChange={(v) =>
-              setValue("institution_id", v, {
-                shouldValidate: true,
-              })
-            }
+            onValueChange={(v) => setValue("institution_id", v, { shouldValidate: true })}
             disabled={loadingInstitutions}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select institution" />
-            </SelectTrigger>
-            <SelectContent>
-              {institutions.length === 0 ? (
-                <SelectItem value="none" disabled>
-                  No institutions found
-                </SelectItem>
-              ) : (
-                institutions.map((i) => (
-                  <SelectItem key={i.id} value={i.id}>
-                    {i.name}
-                  </SelectItem>
-                ))
-              )}
-            </SelectContent>
-          </Select>
+            placeholder="Select institution"
+            searchPlaceholder="Search institution..."
+            options={institutions.map((i) => ({ value: i.id, label: i.name }))}
+          />
         </Field>
 
         {/* STATUS */}

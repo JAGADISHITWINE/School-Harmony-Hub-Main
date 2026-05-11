@@ -37,6 +37,7 @@ export function HodLinkingPage() {
   const [branches, setBranches] = useState<Option[]>([]);
   const [rows, setRows] = useState<HODLinkRow[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const [hodUserId, setHodUserId] = useState("");
   const [courseId, setCourseId] = useState("");
@@ -58,7 +59,7 @@ export function HodLinkingPage() {
 
   const loadCourses = async () => {
     if (!institutionId) return;
-    const res = await api.get<any>(`/courses?institution_id=${institutionId}&page=1&page_size=100`);
+    const res = await api.get<any>(`/courses?institution_id=${institutionId}&page=1&page_size=500`);
     setCourses(listFrom<any>(res).map((x) => ({ id: x.id, name: x.name })));
   };
 
@@ -67,7 +68,7 @@ export function HodLinkingPage() {
       setBranches([]);
       return;
     }
-    const res = await api.get<any>(`/branches?course_id=${selectedCourseId}&page=1&page_size=100`);
+    const res = await api.get<any>(`/branches?course_id=${selectedCourseId}&page=1&page_size=500`);
     setBranches(listFrom<any>(res).map((x) => ({ id: x.id, name: x.name })));
   };
 
@@ -95,32 +96,38 @@ export function HodLinkingPage() {
   }, [institutionId, courseId, branchId]);
 
   const createLink = async () => {
+    if (saving) return;
     if (!institutionId || !hodUserId || !courseId || !branchId) {
       toast.error("Select HOD, course and branch");
       return;
     }
-    if (editingId) {
-      await api.patch(`/teachers/links/hod/${editingId}`, {
-        hod_user_id: hodUserId,
-        institution_id: institutionId,
-        course_id: courseId,
-        branch_id: branchId,
-      });
-      toast.success("HOD link updated");
-    } else {
-      await api.post("/teachers/links/hod", {
-        hod_user_id: hodUserId,
-        institution_id: institutionId,
-        course_id: courseId,
-        branch_id: branchId,
-      });
-      toast.success("HOD linked");
+    setSaving(true);
+    try {
+      if (editingId) {
+        await api.patch(`/teachers/links/hod/${editingId}`, {
+          hod_user_id: hodUserId,
+          institution_id: institutionId,
+          course_id: courseId,
+          branch_id: branchId,
+        });
+        toast.success("HOD link updated");
+      } else {
+        await api.post("/teachers/links/hod", {
+          hod_user_id: hodUserId,
+          institution_id: institutionId,
+          course_id: courseId,
+          branch_id: branchId,
+        });
+        toast.success("HOD linked");
+      }
+      setHodUserId("");
+      setCourseId("");
+      setBranchId("");
+      setEditingId(null);
+      await loadRows();
+    } finally {
+      setSaving(false);
     }
-    setHodUserId("");
-    setCourseId("");
-    setBranchId("");
-    setEditingId(null);
-    await loadRows();
   };
 
   const removeLink = async (id: string) => {
@@ -182,8 +189,8 @@ export function HodLinkingPage() {
             <div className="text-sm"><span className="text-muted-foreground">HOD:</span> {selectedTeacher ? selectedTeacher.full_name : "-"}</div>
             <div className="text-sm"><span className="text-muted-foreground">Course:</span> {selectedCourse ? selectedCourse.name : "-"}</div>
             <div className="text-sm"><span className="text-muted-foreground">Branch:</span> {selectedBranch ? selectedBranch.name : "-"}</div>
-            <Button className="w-full mt-2" onClick={() => createLink().catch(() => toast.error("Failed to link HOD"))}>
-              {editingId ? "Update HOD Link" : "Create HOD Link"}
+            <Button className="w-full mt-2" disabled={saving} onClick={() => createLink().catch(() => toast.error("Failed to link HOD"))}>
+              {saving ? "Saving..." : editingId ? "Update HOD Link" : "Create HOD Link"}
             </Button>
             {editingId && (
               <Button variant="outline" className="w-full" onClick={cancelEdit}>

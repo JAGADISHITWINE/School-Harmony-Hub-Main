@@ -10,13 +10,17 @@ type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").trim().replace(/\/$/, "");
 console.log("API Base URL:", API_BASE_URL || "Using mock API");
 const TOKEN_KEY = "sms_token";
+const REFRESH_TOKEN_KEY = "sms_refresh_token";
 const AUTH_KEY = "sms_auth";
-export const MAX_PAGE_SIZE = 100;
+export const MAX_PAGE_SIZE = 500;
 
 export const tokenStore = {
   get: () => (typeof window === "undefined" ? null : sessionStorage.getItem(TOKEN_KEY)),
   set: (t: string) => sessionStorage.setItem(TOKEN_KEY, t),
   clear: () => sessionStorage.removeItem(TOKEN_KEY),
+  getRefresh: () => (typeof window === "undefined" ? null : sessionStorage.getItem(REFRESH_TOKEN_KEY)),
+  setRefresh: (t: string) => sessionStorage.setItem(REFRESH_TOKEN_KEY, t),
+  clearRefresh: () => sessionStorage.removeItem(REFRESH_TOKEN_KEY),
 };
 
 let sessionExpiryNotified = false;
@@ -24,6 +28,7 @@ let sessionExpiryNotified = false;
 function forceSessionLogout(message = "Session expired. Please login again.") {
   if (typeof window === "undefined") return;
   tokenStore.clear();
+  tokenStore.clearRefresh();
   sessionStorage.removeItem(AUTH_KEY);
   if (!sessionExpiryNotified) {
     sessionExpiryNotified = true;
@@ -68,6 +73,35 @@ function endpoint(path: string) {
 
 async function backendRequest<T>(method: Method, url: string, body?: any): Promise<T> {
   const safeUrl = clampPageSize(url);
+  return backendRequestOnce<T>(method, safeUrl, body, true);
+}
+
+async function refreshAccessToken() {
+  const refreshToken = tokenStore.getRefresh();
+  if (!refreshToken) return false;
+
+  const res = await fetch(endpoint("/auth/refresh"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+
+  const raw = await res.text();
+  let data: any = null;
+  try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
+  if (!res.ok) return false;
+
+  const payload = data?.data || data;
+  const accessToken = payload?.access_token || payload?.token || payload?.accessToken;
+  const nextRefreshToken = payload?.refresh_token || payload?.refreshToken;
+  if (!accessToken) return false;
+
+  tokenStore.set(accessToken);
+  if (nextRefreshToken) tokenStore.setRefresh(nextRefreshToken);
+  return true;
+}
+
+async function backendRequestOnce<T>(method: Method, safeUrl: string, body: any, allowRefresh: boolean): Promise<T> {
   const token = tokenStore.get();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -83,6 +117,9 @@ async function backendRequest<T>(method: Method, url: string, body?: any): Promi
   try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
   if (!res.ok) {
     if (res.status === 401 && !safeUrl.startsWith("/auth/")) {
+      if (allowRefresh && await refreshAccessToken()) {
+        return backendRequestOnce<T>(method, safeUrl, body, false);
+      }
       forceSessionLogout();
       throw new Error("Session expired");
     }

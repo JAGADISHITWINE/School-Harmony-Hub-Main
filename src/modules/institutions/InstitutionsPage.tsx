@@ -74,7 +74,7 @@ export function InstitutionsPage() {
 
   const loadOrgs = async () => {
     try {
-      const res = await api.get<any>("/organizations?page=1&page_size=100");
+      const res = await api.get<any>("/organizations?page=1&page_size=500");
       const rows = (Array.isArray(res?.data?.items) && res.data.items) || [];
       setOrgs(rows as Organization[]);
       if (!selectedOrgId && rows.length > 0) setSelectedOrgId(rows[0].id);

@@ -40,10 +40,10 @@ interface Mark {
 
 interface AcademicYear { id: string; label: string; is_current?: boolean; }
 interface Course { id: string; name: string; }
-interface Branch { id: string; name: string; }
-interface ClassRow { id: string; name: string; }
-interface Subject { id: string; name: string; code: string; }
-interface Student { id: string; full_name: string; roll_number: string; }
+interface Branch { id: string; name: string; course_id?: string; course_name?: string; }
+interface ClassRow { id: string; name: string; branch_id?: string; course_id?: string; course_name?: string; }
+interface Subject { id: string; name: string; code: string; class_id?: string; branch_id?: string; section_id?: string | null; }
+interface Student { id: string; full_name: string; roll_number: string; current_section_id?: string | null; current_class_id?: string | null; }
 
 const listFrom = <T,>(payload: any): T[] =>
   (Array.isArray(payload?.data?.items) && payload.data.items) ||
@@ -56,6 +56,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 export function ExamsModule() {
   const { user } = useAuth();
   const institutionId = user?.institution_id || "";
+  const isTeacher = user?.role === "teacher";
   const [loading, setLoading] = useState(false);
   const [exams, setExams] = useState<Exam[]>([]);
   const [examSubjects, setExamSubjects] = useState<ExamSubject[]>([]);
@@ -76,23 +77,77 @@ export function ExamsModule() {
   const selectedExam = exams.find((e) => e.id === selectedExamId) || exams[0];
   const yearById = useMemo(() => new Map(years.map((y) => [y.id, y.label])), [years]);
   const subjectById = useMemo(() => new Map(subjects.map((s) => [s.id, `${s.code} - ${s.name}`])), [subjects]);
+  const visibleExamSubjects = useMemo(() => {
+    if (!isTeacher) return examSubjects;
+    const allowedSubjectIds = new Set(subjects.map((subject) => subject.id));
+    return examSubjects.filter((item) => allowedSubjectIds.has(item.subject_id));
+  }, [examSubjects, isTeacher, subjects]);
+  const branchOptions = useMemo(
+    () => branches.filter((branch) => !scope.course_id || branch.course_id === scope.course_id),
+    [branches, scope.course_id]
+  );
+  const classOptions = useMemo(
+    () => classes.filter((item) => {
+      if (scope.course_id && item.course_id !== scope.course_id) return false;
+      if (scope.branch_id && item.branch_id !== scope.branch_id) return false;
+      return true;
+    }),
+    [classes, scope.branch_id, scope.course_id]
+  );
+  const subjectOptions = useMemo(
+    () => subjects.filter((item) => {
+      if (scope.course_id && !courses.some((course) => course.id === scope.course_id)) return false;
+      if (scope.branch_id && item.branch_id !== scope.branch_id) return false;
+      if (scope.class_id && item.class_id !== scope.class_id) return false;
+      return true;
+    }),
+    [courses, scope.branch_id, scope.class_id, scope.course_id, subjects]
+  );
+  const filteredStudents = useMemo(() => {
+    if (!isTeacher || !selectedExamSubjectId) return students;
+    const examSubject = visibleExamSubjects.find((item) => item.id === selectedExamSubjectId);
+    if (!examSubject) return students;
+    const allowedSectionIds = new Set(
+      subjects
+        .filter((subject) => subject.id === examSubject.subject_id && subject.section_id)
+        .map((subject) => String(subject.section_id))
+    );
+    if (allowedSectionIds.size === 0) return students;
+    return students.filter((student) => student.current_section_id && allowedSectionIds.has(String(student.current_section_id)));
+  }, [isTeacher, selectedExamSubjectId, students, subjects, visibleExamSubjects]);
 
   const load = async () => {
     if (!institutionId) return;
     setLoading(true);
     try {
-      const [examsRes, yearsRes, coursesRes, studentsRes] = await Promise.all([
-        api.get<any>("/exams?page=1&page_size=100"),
-        api.get<any>(`/academic-years?institution_id=${institutionId}&page=1&page_size=100`),
-        api.get<any>(`/courses?institution_id=${institutionId}&page=1&page_size=100`),
-        api.get<any>("/students?page=1&page_size=100"),
+      const [examsRes, yearsRes, coursesRes, studentsRes, scopeRes] = await Promise.all([
+        api.get<any>("/exams?page=1&page_size=500"),
+        api.get<any>(`/academic-years?institution_id=${institutionId}&page=1&page_size=500`),
+        isTeacher ? Promise.resolve({ data: { items: [] } }) : api.get<any>(`/courses?institution_id=${institutionId}&page=1&page_size=500`),
+        api.get<any>("/students?page=1&page_size=500"),
+        isTeacher ? api.get<any>("/teachers/self/teaching-scope") : Promise.resolve(null),
       ]);
       const nextExams = listFrom<Exam>(examsRes);
       const nextYears = listFrom<AcademicYear>(yearsRes);
       setExams(nextExams);
       setYears(nextYears);
-      setCourses(listFrom<Course>(coursesRes));
       setStudents(listFrom<Student>(studentsRes));
+      if (isTeacher) {
+        const scope = scopeRes?.data?.data || scopeRes?.data || {};
+        const scopedBranches = (scope.branches || []) as Branch[];
+        const scopedClasses = (scope.classes || []) as ClassRow[];
+        const scopedSubjects = (scope.subjects || []) as Subject[];
+        const courseMap = new Map<string, Course>();
+        [...scopedBranches, ...scopedClasses].forEach((item: any) => {
+          if (item.course_id) courseMap.set(String(item.course_id), { id: String(item.course_id), name: item.course_name || "Course" });
+        });
+        setCourses([...courseMap.values()]);
+        setBranches(scopedBranches);
+        setClasses(scopedClasses);
+        setSubjects(scopedSubjects);
+      } else {
+        setCourses(listFrom<Course>(coursesRes));
+      }
       setExamForm((prev) => ({ ...prev, academic_year_id: prev.academic_year_id || nextYears.find((y) => y.is_current)?.id || nextYears[0]?.id || "" }));
       if (!selectedExamId && nextExams[0]) setSelectedExamId(nextExams[0].id);
     } catch (err: any) {
@@ -105,25 +160,28 @@ export function ExamsModule() {
   useEffect(() => { load(); }, [institutionId]);
 
   useEffect(() => {
+    if (isTeacher) return;
     if (!scope.course_id) { setBranches([]); return; }
-    api.get<any>(`/branches?course_id=${scope.course_id}&page=1&page_size=100`)
+    api.get<any>(`/branches?course_id=${scope.course_id}&page=1&page_size=500`)
       .then((res) => setBranches(listFrom<Branch>(res)))
       .catch(() => setBranches([]));
-  }, [scope.course_id]);
+  }, [scope.course_id, isTeacher]);
 
   useEffect(() => {
+    if (isTeacher) return;
     if (!scope.branch_id) { setClasses([]); return; }
-    api.get<any>(`/classes?branch_id=${scope.branch_id}&page=1&page_size=100`)
+    api.get<any>(`/classes?branch_id=${scope.branch_id}&page=1&page_size=500`)
       .then((res) => setClasses(listFrom<ClassRow>(res)))
       .catch(() => setClasses([]));
-  }, [scope.branch_id]);
+  }, [scope.branch_id, isTeacher]);
 
   useEffect(() => {
+    if (isTeacher) return;
     if (!scope.class_id) { setSubjects([]); return; }
-    api.get<any>(`/subjects?class_id=${scope.class_id}&page=1&page_size=100`)
+    api.get<any>(`/subjects?class_id=${scope.class_id}&page=1&page_size=500`)
       .then((res) => setSubjects(listFrom<Subject>(res)))
       .catch(() => setSubjects([]));
-  }, [scope.class_id]);
+  }, [scope.class_id, isTeacher]);
 
   const loadExamSubjects = async (examId: string) => {
     if (!examId) return;
@@ -136,19 +194,28 @@ export function ExamsModule() {
   useEffect(() => { if (selectedExamId) loadExamSubjects(selectedExamId).catch(() => setExamSubjects([])); }, [selectedExamId]);
 
   useEffect(() => {
+    if (!isTeacher) return;
+    setSelectedExamSubjectId((current) =>
+      current && visibleExamSubjects.some((item) => item.id === current)
+        ? current
+        : visibleExamSubjects[0]?.id || ""
+    );
+  }, [isTeacher, visibleExamSubjects]);
+
+  useEffect(() => {
     if (!selectedExamSubjectId) return;
     api.get<any>(`/exams/marks/${selectedExamSubjectId}`)
       .then((res) => {
         const existing = new Map(listFrom<Mark>(res).map((m) => [m.student_id, m]));
         const next: Record<string, { marks: string; absent: boolean }> = {};
-        students.forEach((student) => {
+        filteredStudents.forEach((student) => {
           const mark = existing.get(student.id);
           next[student.id] = { marks: mark?.marks_obtained == null ? "" : String(mark.marks_obtained), absent: !!mark?.is_absent };
         });
         setMarks(next);
       })
       .catch(() => setMarks({}));
-  }, [selectedExamSubjectId, students.length]);
+  }, [selectedExamSubjectId, filteredStudents.length]);
 
   const createExam = async () => {
     if (!examForm.academic_year_id || !examForm.name.trim()) return toast.error("Enter exam name and academic year");
@@ -180,7 +247,7 @@ export function ExamsModule() {
 
   const uploadMarks = async () => {
     if (!selectedExamSubjectId) return toast.error("Select exam subject");
-    const entries = students.map((student) => ({
+    const entries = filteredStudents.map((student) => ({
       student_id: student.id,
       is_absent: !!marks[student.id]?.absent,
       marks_obtained: marks[student.id]?.absent || marks[student.id]?.marks === "" ? null : Number(marks[student.id]?.marks || 0),
@@ -220,7 +287,7 @@ export function ExamsModule() {
         <TabsContent value="marks">
           <div className="mb-4 grid gap-3 md:grid-cols-2">
             <SelectField label="Exam" value={selectedExam?.id || ""} onChange={setSelectedExamId} items={exams.map((e) => ({ id: e.id, label: `${e.name} - ${yearById.get(e.academic_year_id) || "Year"} (${e.workflow_status})` }))} />
-            <SelectField label="Subject" value={selectedExamSubjectId} onChange={setSelectedExamSubjectId} items={examSubjects.map((es) => ({ id: es.id, label: `${subjectById.get(es.subject_id) || es.subject_id} - ${es.max_marks} marks` }))} />
+            <SelectField label="Subject" value={selectedExamSubjectId} onChange={setSelectedExamSubjectId} items={visibleExamSubjects.map((es) => ({ id: es.id, label: `${subjectById.get(es.subject_id) || es.subject_id} - ${es.max_marks} marks` }))} />
           </div>
           <Panel title="Marks Entry">
             <div className="overflow-x-auto">
@@ -229,7 +296,7 @@ export function ExamsModule() {
                   <tr><th className="py-2">Roll</th><th>Student</th><th className="w-40">Marks</th><th className="w-28">Absent</th></tr>
                 </thead>
                 <tbody>
-                  {students.map((student) => (
+                  {filteredStudents.map((student) => (
                     <tr key={student.id} className="border-b border-border/70">
                       <td className="py-2 font-mono text-xs">{student.roll_number}</td>
                       <td className="font-medium">{student.full_name}</td>
@@ -237,7 +304,7 @@ export function ExamsModule() {
                       <td><input type="checkbox" checked={!!marks[student.id]?.absent} onChange={(e) => setMarks((prev) => ({ ...prev, [student.id]: { marks: e.target.checked ? "" : prev[student.id]?.marks || "", absent: e.target.checked } }))} /></td>
                     </tr>
                   ))}
-                  {students.length === 0 && <tr><td colSpan={4} className="py-8 text-center text-muted-foreground">No students available.</td></tr>}
+                  {filteredStudents.length === 0 && <tr><td colSpan={4} className="py-8 text-center text-muted-foreground">No students available for this teacher assignment.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -251,9 +318,9 @@ export function ExamsModule() {
               <FieldGrid>
                 <SelectField label="Exam" value={selectedExam?.id || ""} onChange={setSelectedExamId} items={exams.map((e) => ({ id: e.id, label: e.name }))} />
                 <SelectField label="Course" value={scope.course_id} onChange={(v) => setScope({ course_id: v, branch_id: "", class_id: "" })} items={courses.map((c) => ({ id: c.id, label: c.name }))} />
-                <SelectField label="Branch" value={scope.branch_id} onChange={(v) => setScope((p) => ({ ...p, branch_id: v, class_id: "" }))} items={branches.map((b) => ({ id: b.id, label: b.name }))} />
-                <SelectField label="Class" value={scope.class_id} onChange={(v) => setScope((p) => ({ ...p, class_id: v }))} items={classes.map((c) => ({ id: c.id, label: c.name }))} />
-                <SelectField label="Subject" value={subjectForm.subject_id} onChange={(v) => setSubjectForm((p) => ({ ...p, subject_id: v }))} items={subjects.map((s) => ({ id: s.id, label: `${s.code} - ${s.name}` }))} />
+                <SelectField label="Branch" value={scope.branch_id} onChange={(v) => setScope((p) => ({ ...p, branch_id: v, class_id: "" }))} items={branchOptions.map((b) => ({ id: b.id, label: b.name }))} />
+                <SelectField label="Class" value={scope.class_id} onChange={(v) => setScope((p) => ({ ...p, class_id: v }))} items={classOptions.map((c) => ({ id: c.id, label: c.name }))} />
+                <SelectField label="Subject" value={subjectForm.subject_id} onChange={(v) => setSubjectForm((p) => ({ ...p, subject_id: v }))} items={subjectOptions.map((s) => ({ id: s.id, label: `${s.code} - ${s.name}` }))} />
                 <Field label="Max Marks"><Input type="number" value={subjectForm.max_marks} onChange={(e) => setSubjectForm((p) => ({ ...p, max_marks: e.target.value }))} /></Field>
                 <Field label="Pass Marks"><Input type="number" value={subjectForm.pass_marks} onChange={(e) => setSubjectForm((p) => ({ ...p, pass_marks: e.target.value }))} /></Field>
                 <Field label="Exam Date"><Input type="date" value={subjectForm.exam_date} onChange={(e) => setSubjectForm((p) => ({ ...p, exam_date: e.target.value }))} /></Field>

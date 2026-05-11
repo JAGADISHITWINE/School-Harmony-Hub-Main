@@ -17,6 +17,10 @@ function pickToken(payload: any): string {
   return asString(payload?.token) || asString(payload?.accessToken) || asString(payload?.access_token);
 }
 
+function pickRefreshToken(payload: any): string {
+  return asString(payload?.refreshToken) || asString(payload?.refresh_token);
+}
+
 function normalizeRole(value: unknown): Role {
   const role = String(value || "").toLowerCase().replace(/\s+/g, "_");
   if (
@@ -110,7 +114,10 @@ export async function backendLogin(login: string, password: string): Promise<Aut
 
   const user = normalizeAuthUser(payload);
   if (!user.token) throw new Error("Login succeeded but token is missing in response");
+  const source = payload?.data ?? payload;
   tokenStore.set(user.token);
+  const refreshToken = pickRefreshToken(payload) || pickRefreshToken(source);
+  if (refreshToken) tokenStore.setRefresh(refreshToken);
   return user;
 }
 

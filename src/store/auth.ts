@@ -4,6 +4,45 @@ import { api } from "@/services/api";
 import { backendLogin, backendMe, isBackendAuthEnabled } from "@/services/auth-api";
 import type { AuthUser, Permission } from "@/types";
 
+const legacyModuleAliases: Record<string, string[]> = {
+  users: ["user", "users"],
+  roles: ["role", "roles"],
+  menus: ["menu", "menus"],
+  students: ["student", "students"],
+  staff: ["teacher", "teachers", "staff"],
+  classes: ["class", "classes", "academic"],
+  attendance: ["attendance"],
+  fees: ["fee", "fees"],
+  notifications: ["notification", "notifications"],
+};
+
+function matchesPermission(requested: string, granted: string) {
+  if (requested === granted) return true;
+
+  const [moduleName, actionName] = requested.split(".");
+  if (!moduleName || !actionName) return false;
+
+  const aliases = legacyModuleAliases[moduleName] || [moduleName];
+  if (actionName === "view") {
+    return aliases.some((alias) => granted === `${alias}.read` || granted === `${alias}_read`);
+  }
+
+  if (actionName === "manage") {
+    return aliases.some((alias) =>
+      granted === `${alias}.manage` ||
+      granted === `${alias}_manage` ||
+      granted === `${alias}_create` ||
+      granted === `${alias}_update` ||
+      granted === `${alias}_delete` ||
+      granted === `${alias}_collect` ||
+      granted === `${alias}_issue` ||
+      granted.endsWith(`.${alias}_manage`)
+    );
+  }
+
+  return false;
+}
+
 interface AuthState {
   user: AuthUser | null;
   loading: boolean;
@@ -21,8 +60,8 @@ export const useAuth = create<AuthState>()(
       user: null,
       loading: false,
       hydrated: false,
-      hasPermission: (p) => !!get().user?.permissions.includes(p),
-      hasAnyPermission: (ps) => ps.some(p => get().user?.permissions.includes(p)),
+      hasPermission: (p) => (get().user?.permissions || []).some((granted) => matchesPermission(p, granted)),
+      hasAnyPermission: (ps) => ps.some(p => (get().user?.permissions || []).some((granted) => matchesPermission(p, granted))),
       login: async (login, password) => {
         set({ loading: true });
         try {
@@ -39,6 +78,7 @@ export const useAuth = create<AuthState>()(
         if (typeof window !== "undefined") {
           sessionStorage.removeItem("sms_auth");
           sessionStorage.removeItem("sms_token");
+          sessionStorage.removeItem("sms_refresh_token");
         }
         set({ user: null });
       },

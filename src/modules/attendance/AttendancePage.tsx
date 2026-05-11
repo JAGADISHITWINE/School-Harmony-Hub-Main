@@ -116,7 +116,7 @@ export function AttendancePage() {
   const loadTeachers = async () => {
     if (isTeacher) return;
     try {
-      const res = await api.get<any>("/teachers?page=1&page_size=100");
+      const res = await api.get<any>("/teachers?page=1&page_size=500");
       const rows = listFrom<any>(res).map((item) => ({
         id: item.id,
         full_name: item.full_name,
@@ -216,6 +216,7 @@ export function AttendancePage() {
   };
 
   const saveAttendance = async () => {
+    if (saving) return;
     if (!selectedSlot) {
       toast.error("Select a timetable slot first");
       return;
@@ -241,6 +242,7 @@ export function AttendancePage() {
   };
 
   const closeSession = async () => {
+    if (saving) return;
     if (!selectedSlot?.session_id) return;
     setSaving(true);
     try {
@@ -276,7 +278,7 @@ export function AttendancePage() {
             </Button>
             <Button onClick={saveAttendance} disabled={!selectedSlot || selectedSlot?.session_status === "closed" || saving}>
               <Save className="mr-2 h-4 w-4" />
-              Save Attendance
+              {saving ? "Saving..." : "Save Attendance"}
             </Button>
           </div>
         }

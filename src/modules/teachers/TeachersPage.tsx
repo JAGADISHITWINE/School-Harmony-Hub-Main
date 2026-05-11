@@ -260,7 +260,7 @@ export function TeachersPage() {
   const loadTeachers = async (keepSelection = true) => {
     setTeachersLoading(true);
     try {
-      const res = await api.get<any>("/teachers?page=1&page_size=100");
+      const res = await api.get<any>("/teachers?page=1&page_size=500");
       const rows = listFrom<TeacherRow>(res);
       setTeachers(rows);
       const nextSelected =
@@ -310,8 +310,8 @@ export function TeachersPage() {
   const loadMeta = async () => {
     if (!user?.institution_id) return;
     const [yearsRes, courseRes, candidateRes] = await Promise.allSettled([
-      api.get<any>(`/academic-years?institution_id=${user.institution_id}&page=1&page_size=100`),
-      api.get<any>(`/courses?institution_id=${user.institution_id}&page=1&page_size=100`),
+      api.get<any>(`/academic-years?institution_id=${user.institution_id}&page=1&page_size=500`),
+      api.get<any>(`/courses?institution_id=${user.institution_id}&page=1&page_size=500`),
       canManage ? api.get<any>("/teachers/candidates") : Promise.resolve({ data: [] }),
     ]);
 
@@ -345,7 +345,7 @@ export function TeachersPage() {
     }
     const load = async () => {
       try {
-        const res = await api.get<any>(`/branches?course_id=${classForm.course_id}&page=1&page_size=100`);
+        const res = await api.get<any>(`/branches?course_id=${classForm.course_id}&page=1&page_size=500`);
         setBranches(listFrom<Option>(res));
       } catch {
         setBranches([]);
@@ -363,7 +363,7 @@ export function TeachersPage() {
     }
     const load = async () => {
       try {
-        const res = await api.get<any>(`/classes?branch_id=${classForm.branch_id}&page=1&page_size=100`);
+        const res = await api.get<any>(`/classes?branch_id=${classForm.branch_id}&page=1&page_size=500`);
         setClasses(listFrom<Option>(res));
       } catch {
         setClasses([]);
@@ -386,8 +386,8 @@ export function TeachersPage() {
     const load = async () => {
       try {
         const [sectionRes, subjectRes] = await Promise.all([
-          api.get<any>(`/sections?class_id=${selectedClass.class_id}&page=1&page_size=100`),
-          api.get<any>(`/subjects?class_id=${selectedClass.class_id}&page=1&page_size=100`),
+          api.get<any>(`/sections?class_id=${selectedClass.class_id}&page=1&page_size=500`),
+          api.get<any>(`/subjects?class_id=${selectedClass.class_id}&page=1&page_size=500`),
         ]);
         setSections(listFrom<Option>(sectionRes));
         setSubjects(listFrom<Option>(subjectRes));

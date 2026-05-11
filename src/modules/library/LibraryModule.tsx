@@ -142,7 +142,7 @@ export function LibraryModule() {
       const [bookRes, issueRes, studentRes] = await Promise.all([
         api.get<any>(`/library/books?${query(bookParams, { institution_id: institutionId })}`),
         api.get<any>(`/library/issues?${query(issueParams)}`),
-        api.get<any>("/students?page=1&page_size=100"),
+        api.get<any>("/students?page=1&page_size=500"),
       ]);
       setBooks(listFrom<BookRow>(bookRes));
       setIssues(listFrom<IssueRow>(issueRes));

@@ -56,6 +56,7 @@ export function TeacherLinkingPage() {
   const [subjects, setSubjects] = useState<SubjectOption[]>([]);
   const [rows, setRows] = useState<TeacherHodSubjectRow[]>([]);
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const [teacherId, setTeacherId] = useState("");
   const [courseId, setCourseId] = useState("");
@@ -78,14 +79,14 @@ export function TeacherLinkingPage() {
   }, [rows]);
 
   const loadTeachers = async () => {
-    const res = await api.get<any>("/teachers?page=1&page_size=100");
+    const res = await api.get<any>("/teachers?page=1&page_size=500");
     const items = listFrom<any>(res).map((x) => ({ id: x.id, full_name: x.full_name, employee_code: x.employee_code }));
     setTeachers(items);
   };
 
   const loadCourses = async () => {
     if (!institutionId) return;
-    const res = await api.get<any>(`/courses?institution_id=${institutionId}&page=1&page_size=100`);
+    const res = await api.get<any>(`/courses?institution_id=${institutionId}&page=1&page_size=500`);
     setCourses(listFrom<any>(res).map((x) => ({ id: x.id, name: x.name })));
   };
 
@@ -94,7 +95,7 @@ export function TeacherLinkingPage() {
       setBranches([]);
       return;
     }
-    const res = await api.get<any>(`/branches?course_id=${selectedCourseId}&page=1&page_size=100`);
+    const res = await api.get<any>(`/branches?course_id=${selectedCourseId}&page=1&page_size=500`);
     setBranches(listFrom<any>(res).map((x) => ({ id: x.id, name: x.name })));
   };
 
@@ -114,7 +115,7 @@ export function TeacherLinkingPage() {
     }
     const byId = new Map<string, SubjectOption>();
     for (const bid of branchIds) {
-      const res = await api.get<any>(`/subjects?branch_id=${bid}&page=1&page_size=100`);
+      const res = await api.get<any>(`/subjects?branch_id=${bid}&page=1&page_size=500`);
       const items = listFrom<any>(res).map((x) => ({ id: x.id, name: x.name, branch_id: bid }));
       for (const item of items) byId.set(item.id, item);
     }
@@ -159,18 +160,46 @@ export function TeacherLinkingPage() {
   };
 
   const createLink = async () => {
+    if (saving) return;
     if (!teacherId || hodLinkIds.length === 0 || subjectIds.length === 0) {
       toast.error("Select teacher, HOD link(s) and at least one subject");
       return;
     }
-    if (editingLinkId) {
-      await api.patch(`/teachers/links/teacher-hod-subjects/${editingLinkId}`, {
-        teacher_id: teacherId,
-        hod_link_id: hodLinkIds[0],
-        subject_id: subjectIds[0],
-      });
-      toast.success("Teacher link updated");
-      setEditingLinkId(null);
+    setSaving(true);
+    try {
+      if (editingLinkId) {
+        await api.patch(`/teachers/links/teacher-hod-subjects/${editingLinkId}`, {
+          teacher_id: teacherId,
+          hod_link_id: hodLinkIds[0],
+          subject_id: subjectIds[0],
+        });
+        toast.success("Teacher link updated");
+        setEditingLinkId(null);
+        setTeacherId("");
+        setCourseId("");
+        setBranchIds([]);
+        setHodLinkIds([]);
+        setSubjectIds([]);
+        setHodLinks([]);
+        setSubjects([]);
+        await loadRows();
+        return;
+      }
+      for (const linkId of hodLinkIds) {
+        const link = hodLinks.find((x) => x.id === linkId);
+        if (!link) continue;
+        const perBranchSubjects = subjectIds.filter((sid) => {
+          const subject = subjects.find((s) => s.id === sid);
+          return subject?.branch_id === link.branch_id;
+        });
+        if (perBranchSubjects.length === 0) continue;
+        await api.post("/teachers/links/teacher-hod-subjects", {
+          teacher_id: teacherId,
+          hod_link_id: linkId,
+          subject_ids: perBranchSubjects,
+        });
+      }
+      toast.success("Teacher linked with HOD subjects");
       setTeacherId("");
       setCourseId("");
       setBranchIds([]);
@@ -179,31 +208,9 @@ export function TeacherLinkingPage() {
       setHodLinks([]);
       setSubjects([]);
       await loadRows();
-      return;
+    } finally {
+      setSaving(false);
     }
-    for (const linkId of hodLinkIds) {
-      const link = hodLinks.find((x) => x.id === linkId);
-      if (!link) continue;
-      const perBranchSubjects = subjectIds.filter((sid) => {
-        const subject = subjects.find((s) => s.id === sid);
-        return subject?.branch_id === link.branch_id;
-      });
-      if (perBranchSubjects.length === 0) continue;
-      await api.post("/teachers/links/teacher-hod-subjects", {
-        teacher_id: teacherId,
-        hod_link_id: linkId,
-        subject_ids: perBranchSubjects,
-      });
-    }
-    toast.success("Teacher linked with HOD subjects");
-    setTeacherId("");
-    setCourseId("");
-    setBranchIds([]);
-    setHodLinkIds([]);
-    setSubjectIds([]);
-    setHodLinks([]);
-    setSubjects([]);
-    await loadRows();
   };
 
   const toggleBranch = (id: string, checked: boolean) => {
@@ -306,8 +313,8 @@ export function TeacherLinkingPage() {
             <div className="text-sm"><span className="text-muted-foreground">Branches:</span> {branchIds.length}</div>
             <div className="text-sm"><span className="text-muted-foreground">HOD Links:</span> {hodLinkIds.length}</div>
             <div className="text-sm"><span className="text-muted-foreground">Subjects:</span> {subjectIds.length}</div>
-            <Button className="w-full mt-2" onClick={() => createLink().catch(() => toast.error("Failed to create teacher link"))}>
-              {editingLinkId ? "Update Link" : "Link Teacher"}
+            <Button className="w-full mt-2" disabled={saving} onClick={() => createLink().catch(() => toast.error("Failed to create teacher link"))}>
+              {saving ? "Saving..." : editingLinkId ? "Update Link" : "Link Teacher"}
             </Button>
             {editingLinkId && (
               <Button variant="outline" className="w-full" onClick={cancelEdit}>

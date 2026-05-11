@@ -115,11 +115,11 @@ export function FeesModule({ initialTab = "collect" }: { initialTab?: FeeTab }) 
     setLoading(true);
     try {
       const [typesRes, coursesRes, yearsRes, studentsRes, feesRes] = await Promise.all([
-        api.get<any>(`/fees/types?institution_id=${institutionId}&page=1&page_size=100`),
-        api.get<any>(`/courses?institution_id=${institutionId}&page=1&page_size=100`),
-        api.get<any>(`/academic-years?institution_id=${institutionId}&page=1&page_size=100`),
-        api.get<any>("/students?page=1&page_size=100"),
-        api.get<any>("/fees/student-fees?page=1&page_size=100"),
+        api.get<any>(`/fees/types?institution_id=${institutionId}&page=1&page_size=500`),
+        api.get<any>(`/courses?institution_id=${institutionId}&page=1&page_size=500`),
+        api.get<any>(`/academic-years?institution_id=${institutionId}&page=1&page_size=500`),
+        api.get<any>("/students?page=1&page_size=500"),
+        api.get<any>("/fees/student-fees?page=1&page_size=500"),
       ]);
       const nextTypes = listFrom<FeeType>(typesRes);
       setFeeTypes(nextTypes);
@@ -130,7 +130,7 @@ export function FeesModule({ initialTab = "collect" }: { initialTab?: FeeTab }) 
 
       const structureResponses = await Promise.all(
         nextTypes.map((feeType) =>
-          api.get<any>(`/fees/structures?fee_type_id=${feeType.id}&page=1&page_size=100`)
+          api.get<any>(`/fees/structures?fee_type_id=${feeType.id}&page=1&page_size=500`)
             .catch(() => ({ data: { items: [] } }))
         )
       );

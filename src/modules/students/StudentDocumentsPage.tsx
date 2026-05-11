@@ -63,7 +63,7 @@ export function StudentDocumentsPage() {
   const rows = list.data.data;
 
   useEffect(() => {
-    api.get<any>("/students?page=1&page_size=100")
+    api.get<any>("/students?page=1&page_size=500")
       .then((res) => setStudents(listFrom<StudentRow>(res)))
       .catch(() => setStudents([]));
   }, []);

@@ -131,8 +131,8 @@ export function ReportsModule() {
     setLoading(true);
     try {
       const [yearsRes, coursesRes] = await Promise.all([
-        api.get<any>(`/academic-years?institution_id=${institutionId}&page=1&page_size=100`),
-        api.get<any>(`/courses?institution_id=${institutionId}&page=1&page_size=100`),
+        api.get<any>(`/academic-years?institution_id=${institutionId}&page=1&page_size=500`),
+        api.get<any>(`/courses?institution_id=${institutionId}&page=1&page_size=500`),
       ]);
       const nextYears = listFrom<AcademicYear>(yearsRes);
       setYears(nextYears);
@@ -154,17 +154,17 @@ export function ReportsModule() {
 
   useEffect(() => {
     if (!filters.course_id) { setBranches([]); return; }
-    api.get<any>(`/branches?course_id=${filters.course_id}&page=1&page_size=100`).then((res) => setBranches(listFrom<Branch>(res))).catch(() => setBranches([]));
+    api.get<any>(`/branches?course_id=${filters.course_id}&page=1&page_size=500`).then((res) => setBranches(listFrom<Branch>(res))).catch(() => setBranches([]));
   }, [filters.course_id]);
 
   useEffect(() => {
     if (!filters.branch_id) { setClasses([]); return; }
-    api.get<any>(`/classes?branch_id=${filters.branch_id}&page=1&page_size=100`).then((res) => setClasses(listFrom<ClassRow>(res))).catch(() => setClasses([]));
+    api.get<any>(`/classes?branch_id=${filters.branch_id}&page=1&page_size=500`).then((res) => setClasses(listFrom<ClassRow>(res))).catch(() => setClasses([]));
   }, [filters.branch_id]);
 
   useEffect(() => {
     if (!filters.class_id) { setSections([]); return; }
-    api.get<any>(`/sections?class_id=${filters.class_id}&page=1&page_size=100`).then((res) => setSections(listFrom<Section>(res))).catch(() => setSections([]));
+    api.get<any>(`/sections?class_id=${filters.class_id}&page=1&page_size=500`).then((res) => setSections(listFrom<Section>(res))).catch(() => setSections([]));
   }, [filters.class_id]);
 
   const loadOverview = async () => {

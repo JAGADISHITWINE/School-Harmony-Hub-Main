@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, MAX_PAGE_SIZE } from "@/services";
 import type { ListParams, Paginated } from "@/types";
 import { toast } from "sonner";
@@ -16,11 +16,48 @@ function toQueryString(params: ListParams) {
   return s ? `?${s}` : "";
 }
 
+function rowTimestamp(row: any) {
+  const value = row?.updated_at ?? row?.updatedAt ?? row?.created_at ?? row?.createdAt;
+  const time = value ? new Date(value).getTime() : 0;
+  return Number.isFinite(time) ? time : 0;
+}
+
+function searchScore(row: any, search?: string) {
+  const term = (search || "").trim().toLowerCase();
+  if (!term) return 0;
+
+  const values = Object.values(row || {})
+    .filter((value) => typeof value === "string" || typeof value === "number")
+    .map((value) => String(value).toLowerCase());
+
+  let best = 0;
+  for (const value of values) {
+    if (value === term) best = Math.max(best, 300);
+    else if (value.startsWith(term)) best = Math.max(best, 200);
+    else if (value.includes(term)) best = Math.max(best, 100);
+  }
+  return best;
+}
+
+function prioritizeRows<T>(rows: T[], params: ListParams) {
+  const copy = [...rows];
+  if ((params.search || "").trim()) {
+    return copy.sort((a, b) => {
+      const score = searchScore(b, params.search) - searchScore(a, params.search);
+      return score || rowTimestamp(b) - rowTimestamp(a);
+    });
+  }
+  if (!params.sortBy) {
+    return copy.sort((a, b) => rowTimestamp(b) - rowTimestamp(a));
+  }
+  return copy;
+}
+
 function normalizePaginated<T>(res: any, params: ListParams): Paginated<T> {
   if (Array.isArray(res)) {
     const pageSize = params.pageSize ?? res.length ?? 10;
     return {
-      data: res as T[],
+      data: prioritizeRows(res as T[], params),
       total: res.length,
       page: params.page ?? 1,
       pageSize,
@@ -46,7 +83,7 @@ function normalizePaginated<T>(res: any, params: ListParams): Paginated<T> {
 
   const pageSize = res?.data?.page_size ?? res?.data?.pageSize ?? res?.page_size ?? res?.pageSize ?? params.pageSize ?? rows.length ?? 10;
   return {
-    data: rows as T[],
+    data: prioritizeRows(rows as T[], params),
     total: Number.isFinite(total) ? total : rows.length,
     page: Number(res?.data?.page ?? res?.page ?? params.page ?? 1),
     pageSize: Number(pageSize),
@@ -80,13 +117,18 @@ export function useList<T>(base: string, initial: ListParams = { page: 1, pageSi
 
 export function useMutate(base: string, onDone?: () => void) {
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
 
   const create = async (body: any) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     try { const r = await api.post(base, body); toast.success("Created"); onDone?.(); return r; }
-    finally { setBusy(false); }
+    finally { busyRef.current = false; setBusy(false); }
   };
   const update = async (id: string, body: any) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     try {
       const r = IS_BACKEND_MODE
@@ -96,17 +138,21 @@ export function useMutate(base: string, onDone?: () => void) {
       onDone?.();
       return r;
     }
-    finally { setBusy(false); }
+    finally { busyRef.current = false; setBusy(false); }
   };
   const remove = async (id: string) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     try { const r = await api.delete(`${base}/${id}`); toast.success("Deleted"); onDone?.(); return r; }
-    finally { setBusy(false); }
+    finally { busyRef.current = false; setBusy(false); }
   };
   const bulkRemove = async (ids: string[]) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     try { const r = await api.post(`${base}/bulk-delete`, { ids }); toast.success(`Deleted ${ids.length}`); onDone?.(); return r; }
-    finally { setBusy(false); }
+    finally { busyRef.current = false; setBusy(false); }
   };
 
   return { busy, create, update, remove, bulkRemove };

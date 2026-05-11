@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/services";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -401,9 +401,9 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
     }
   };
 
-  const fetchEp = async (ep: string, query: string): Promise<Paginated<any> | null> => {
-    if (!query) return null;
-    const res = await api.get<any>(`/${ep}?${query}&page=1&page_size=100`);
+  const fetchEp = async (ep: string, query = ""): Promise<Paginated<any> | null> => {
+    const prefix = query ? `${query}&` : "";
+    const res = await api.get<any>(`/${ep}?${prefix}page=1&page_size=500`);
     return pageOf<any>(res);
   };
 
@@ -416,42 +416,33 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
   const loadCourses = async () => {
     if (!activeInstitutionId) return;
     const page = await fetchEp(epCourses, `institution_id=${activeInstitutionId}`);
-    if (page) {
-      setEpData(epCourses, page);
-      if (!page.data.some((c: Course) => c.id === courseFilter)) setCourseFilter(page.data[0]?.id || "");
-    }
+    if (page) setEpData(epCourses, page);
   };
 
   const loadBranches = async (courseId = courseFilter) => {
-    if (!courseId) { setEpData(epBranches, emptyPage()); return; }
-    const page = await fetchEp(epBranches, `course_id=${courseId}`);
-    if (page) {
-      setEpData(epBranches, page);
-      if (!page.data.some((b: Branch) => b.id === branchFilter)) setBranchFilter(page.data[0]?.id || "");
-    }
+    const page = await fetchEp(epBranches, courseId ? `course_id=${courseId}` : "");
+    if (page) setEpData(epBranches, page);
   };
 
   const loadSubjects = async (classId = classFilter) => {
-    if (!classId) { setEpData("subjects", emptyPage()); return; }
-    const page = await fetchEp("subjects", `class_id=${classId}`);
+    const params = new URLSearchParams();
+    if (courseFilter) params.set("course_id", courseFilter);
+    if (branchFilter) params.set("branch_id", branchFilter);
+    if (classId) params.set("class_id", classId);
+    const page = await fetchEp("subjects", params.toString());
     if (page) setEpData("subjects", page);
   };
 
   const loadClasses = async (courseId = courseFilter) => {
-    if (!courseId) { setEpData(epClasses, emptyPage()); return; }
-    const query = branchFilter
-      ? `course_id=${courseId}&branch_id=${branchFilter}`
-      : `course_id=${courseId}`;
-    const page = await fetchEp(epClasses, query);
-    if (page) {
-      setEpData(epClasses, page);
-      if (!page.data.some((c: ClassRow) => c.id === classFilter)) setClassFilter(page.data[0]?.id || "");
-    }
+    const params = new URLSearchParams();
+    if (courseId) params.set("course_id", courseId);
+    if (branchFilter) params.set("branch_id", branchFilter);
+    const page = await fetchEp(epClasses, params.toString());
+    if (page) setEpData(epClasses, page);
   };
 
   const loadSections = async (classId = classFilter) => {
-    if (!classId) { setEpData(epSections, emptyPage()); return; }
-    const page = await fetchEp(epSections, `class_id=${classId}`);
+    const page = await fetchEp(epSections, classId ? `class_id=${classId}` : "");
     if (page) setEpData(epSections, page);
   };
 
@@ -461,6 +452,10 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
       await loadInstitutions();
       await loadAcademicYears();
       await loadCourses();
+      await loadBranches("");
+      await loadClasses("");
+      await loadSubjects("");
+      await loadSections("");
     } catch (err: any) {
       toast.error(err?.message || "Unable to load academic masters");
     } finally {
@@ -470,9 +465,9 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
 
   useEffect(() => { if (institutionId && !activeInstitutionId) setActiveInstitutionId(institutionId); }, [institutionId]);
   useEffect(() => { loadAll(); }, [activeInstitutionId, organizationId]);
-  useEffect(() => { if (courseFilter) loadBranches(courseFilter).catch(() => {}); }, [courseFilter]);
-  useEffect(() => { if (courseFilter) loadClasses(courseFilter).catch(() => {}); }, [courseFilter, branchFilter]);
-  useEffect(() => { if (classFilter) { loadSubjects(classFilter).catch(() => {}); loadSections(classFilter).catch(() => {}); } }, [classFilter]);
+  useEffect(() => { loadBranches(courseFilter).catch(() => {}); }, [courseFilter]);
+  useEffect(() => { loadClasses(courseFilter).catch(() => {}); }, [courseFilter, branchFilter]);
+  useEffect(() => { loadSubjects(classFilter).catch(() => {}); loadSections(classFilter).catch(() => {}); }, [courseFilter, branchFilter, classFilter]);
 
   // Form option loader
   useEffect(() => {
@@ -481,22 +476,22 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
     if (!instId) return;
     (async () => {
       try {
-        const yearsRes = await api.get<any>(`/academic-years?institution_id=${instId}&page=1&page_size=100`);
+        const yearsRes = await api.get<any>(`/academic-years?institution_id=${instId}&page=1&page_size=500`);
         const nextYears = rowsOf<AcademicYear>(yearsRes);
         setFormAcademicYears(nextYears);
 
-        const coursesRes = await api.get<any>(`/courses?institution_id=${instId}&page=1&page_size=100`);
+        const coursesRes = await api.get<any>(`/courses?institution_id=${instId}&page=1&page_size=500`);
         const nextCourses = rowsOf<Course>(coursesRes);
         setFormCourses(nextCourses);
 
         const branchRes = await Promise.all(
-          nextCourses.map((c) => api.get<any>(`/branches?course_id=${c.id}&page=1&page_size=100`).catch(() => ({ data: { items: [] } })))
+          nextCourses.map((c) => api.get<any>(`/branches?course_id=${c.id}&page=1&page_size=500`).catch(() => ({ data: { items: [] } })))
         );
         const nextBranches = branchRes.flatMap((r) => rowsOf<Branch>(r));
         setFormBranches(nextBranches);
 
         const classRes = await Promise.all(
-          nextBranches.map((b) => api.get<any>(`/classes?branch_id=${b.id}&page=1&page_size=100`).catch(() => ({ data: { items: [] } })))
+          nextBranches.map((b) => api.get<any>(`/classes?branch_id=${b.id}&page=1&page_size=500`).catch(() => ({ data: { items: [] } })))
         );
         const nextClasses = classRes.flatMap((r) => rowsOf<ClassRow>(r));
         setFormClasses(nextClasses);
@@ -549,6 +544,13 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
     else if (effectiveEndpoint === "subjects") await loadSubjects();
     else if (effectiveEndpoint === "classes") await loadClasses();
     else await loadSections();
+  };
+
+  const deleteRow = async (row: any) => {
+    if (!window.confirm(`Delete this ${activeTabMeta?.label.replace(/s$/, "").toLowerCase() || "record"}?`)) return;
+    await api.delete(`/${effectiveEndpoint}/${row.id}`);
+    toast.success("Deleted");
+    await refreshActive();
   };
 
   const save = async () => {
@@ -655,7 +657,14 @@ export function AcademicMastersPage({ initialTab }: { initialTab?: AcademicTab }
         params={params}
         onParamsChange={setParams}
         searchPlaceholder={`Search ${activeTabMeta?.label.toLowerCase() || ""}...`}
-        rowActions={(row) => <Button variant="ghost" size="sm" onClick={() => openEdit(row)}>Edit</Button>}
+        rowActions={(row) => (
+          <div className="inline-flex gap-1">
+            <Button variant="ghost" size="sm" onClick={() => openEdit(row)}>Edit</Button>
+            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => deleteRow(row)}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
       />
 
       <FormModal
@@ -714,6 +723,21 @@ function Filters({
       {needsCourse && <Picker label="Course" value={courseFilter} onChange={setCourseFilter} items={courses.map((c) => ({ id: c.id, label: c.name }))} />}
       {needsBranch && <Picker label="Branch" value={branchFilter} onChange={setBranchFilter} items={branches.map((b) => ({ id: b.id, label: b.name }))} />}
       {needsClass && <Picker label="Class" value={classFilter} onChange={setClassFilter} items={classes.map((c) => ({ id: c.id, label: c.name }))} />}
+      {(needsCourse || needsBranch || needsClass) && (
+        <div className="flex items-end">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setCourseFilter("");
+              setBranchFilter("");
+              setClassFilter("");
+            }}
+          >
+            Clear All
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -722,9 +746,10 @@ function Picker({ label, value, onChange, items }: { label: string; value: strin
   return (
     <div className="w-full sm:w-64">
       <div className="mb-1 text-xs text-muted-foreground">{label}</div>
-      <Select value={value} onValueChange={onChange}>
+      <Select value={value || "__all__"} onValueChange={(v) => onChange(v === "__all__" ? "" : v)}>
         <SelectTrigger><SelectValue placeholder={`Select ${label.toLowerCase()}`} /></SelectTrigger>
         <SelectContent>
+          {label !== "Institution" && <SelectItem value="__all__">All {label.toLowerCase()}s</SelectItem>}
           {items.map((item) => <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>)}
         </SelectContent>
       </Select>
@@ -797,6 +822,12 @@ function AcademicForm({
   currentInstitutionLabel: string;
 }) {
   const ep = resolveEndpoint(activeEndpoint);
+  const filteredBranches = branches.filter((branch) => !form.course_id || branch.course_id === form.course_id);
+  const filteredClasses = classes.filter((item) => {
+    if (form.course_id && item.course_id !== form.course_id) return false;
+    if (form.branch_id && item.branch_id !== form.branch_id) return false;
+    return true;
+  });
   return (
     <FieldGrid>
       <SelectField
@@ -817,8 +848,25 @@ function AcademicForm({
 
       {(ep === "subjects" || ep === "classes") && (
         <>
-          <SelectField label="Course" value={form.course_id || ""} onChange={(v) => setField("course_id", v)} items={courses.map((c) => ({ id: c.id, label: c.name }))} />
-          <SelectField label="Branch" value={form.branch_id || ""} onChange={(v) => setField("branch_id", v)} items={branches.map((b) => ({ id: b.id, label: b.name }))} />
+          <SelectField
+            label="Course"
+            value={form.course_id || ""}
+            onChange={(v) => {
+              setField("course_id", v);
+              setField("branch_id", "");
+              setField("class_id", "");
+            }}
+            items={courses.map((c) => ({ id: c.id, label: c.name }))}
+          />
+          <SelectField
+            label="Branch"
+            value={form.branch_id || ""}
+            onChange={(v) => {
+              setField("branch_id", v);
+              setField("class_id", "");
+            }}
+            items={filteredBranches.map((b) => ({ id: b.id, label: b.name }))}
+          />
           <SelectField
             label="Academic Year"
             value={form.academic_year_id || "__none__"}
@@ -829,12 +877,12 @@ function AcademicForm({
       )}
 
       {ep === "sections" && (
-        <SelectField label="Class" value={form.class_id || ""} onChange={(v) => setField("class_id", v)} items={classes.map((c) => ({ id: c.id, label: c.name }))} />
+        <SelectField label="Class" value={form.class_id || ""} onChange={(v) => setField("class_id", v)} items={filteredClasses.map((c) => ({ id: c.id, label: c.name }))} />
       )}
 
       {ep === "subjects" && (
         <>
-          <SelectField label="Class" value={form.class_id || ""} onChange={(v) => setField("class_id", v)} items={classes.map((c) => ({ id: c.id, label: c.name }))} />
+          <SelectField label="Class" value={form.class_id || ""} onChange={(v) => setField("class_id", v)} items={filteredClasses.map((c) => ({ id: c.id, label: c.name }))} />
           <Field label="Semester (Optional)"><Input type="number" value={form.semester ?? ""} onChange={(e) => setField("semester", e.target.value)} /></Field>
         </>
       )}

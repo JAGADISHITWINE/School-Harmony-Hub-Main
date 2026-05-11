@@ -106,6 +106,10 @@ export function PermissionsPage() {
 
   const menuById = useMemo(() => new Map(menus.map((m) => [m.id, m])), [menus]);
   const menuTree = useMemo(() => buildMenuTree(menus), [menus]);
+  const allPermissionIds = useMemo(() => permissions.map((permission) => permission.id), [permissions]);
+  const selectedPermissionCount = allPermissionIds.filter((id) => selectedPermissionIds.has(id)).length;
+  const allPermissionsSelected = allPermissionIds.length > 0 && selectedPermissionCount === allPermissionIds.length;
+  const somePermissionsSelected = selectedPermissionCount > 0 && !allPermissionsSelected;
 
   const groupedPermissions = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -128,7 +132,7 @@ export function PermissionsPage() {
     setLoading(true);
     try {
       const [rolesRes, permissionsRes, menusRes] = await Promise.all([
-        api.get<any>("/roles?page=1&page_size=100"),
+        api.get<any>("/roles?page=1&page_size=500"),
         api.get<any>("/roles/permissions"),
         api.get<any>("/menus"),
       ]);
@@ -178,6 +182,13 @@ export function PermissionsPage() {
       if (next.has(permissionId)) next.delete(permissionId);
       else next.add(permissionId);
       return next;
+    });
+  };
+
+  const toggleAllPermissions = () => {
+    setSelectedPermissionIds(() => {
+      if (allPermissionsSelected) return new Set();
+      return new Set(allPermissionIds);
     });
   };
 
@@ -305,6 +316,27 @@ export function PermissionsPage() {
                 </Button>
               </div>
 
+              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-border bg-background px-4 py-3 hover:bg-muted/40">
+                <div className="flex min-w-0 items-center gap-3">
+                  <Checkbox
+                    checked={allPermissionsSelected ? true : somePermissionsSelected ? "indeterminate" : false}
+                    onCheckedChange={toggleAllPermissions}
+                    disabled={!selectedRoleId || allPermissionIds.length === 0}
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium">Select all permissions</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {selectedPermissionCount} of {allPermissionIds.length} enabled
+                    </span>
+                  </span>
+                </div>
+                {allPermissionsSelected && (
+                  <Badge variant="outline" className="text-primary">
+                    <Check className="mr-1 h-3 w-3" /> Full
+                  </Badge>
+                )}
+              </label>
+
               <div className="space-y-4">
                 {Object.entries(groupedPermissions).map(([module, rows]) => (
                   <PermissionGroup
@@ -313,6 +345,15 @@ export function PermissionsPage() {
                     rows={rows}
                     selectedIds={selectedPermissionIds}
                     onToggle={togglePermission}
+                    onToggleGroup={(permissionIds) => {
+                      setSelectedPermissionIds((prev) => {
+                        const next = new Set(prev);
+                        const allSelected = permissionIds.every((id) => next.has(id));
+                        if (allSelected) permissionIds.forEach((id) => next.delete(id));
+                        else permissionIds.forEach((id) => next.add(id));
+                        return next;
+                      });
+                    }}
                   />
                 ))}
               </div>
@@ -352,21 +393,32 @@ function PermissionGroup({
   rows,
   selectedIds,
   onToggle,
+  onToggleGroup,
 }: {
   module: string;
   rows: PermissionRow[];
   selectedIds: Set<string>;
   onToggle: (id: string) => void;
+  onToggleGroup: (ids: string[]) => void;
 }) {
   const selectedCount = rows.filter((row) => selectedIds.has(row.id)).length;
+  const permissionIds = rows.map((row) => row.id);
+  const allSelected = rows.length > 0 && selectedCount === rows.length;
+  const someSelected = selectedCount > 0 && !allSelected;
 
   return (
     <Card className="overflow-hidden border-border bg-background">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <div>
-          <h3 className="text-sm font-semibold">{titleCase(module)}</h3>
-          <p className="text-xs text-muted-foreground">{selectedCount} of {rows.length} enabled</p>
-        </div>
+        <label className="flex cursor-pointer items-center gap-3">
+          <Checkbox
+            checked={allSelected ? true : someSelected ? "indeterminate" : false}
+            onCheckedChange={() => onToggleGroup(permissionIds)}
+          />
+          <span>
+            <span className="block text-sm font-semibold">{titleCase(module)}</span>
+            <span className="block text-xs text-muted-foreground">{selectedCount} of {rows.length} enabled</span>
+          </span>
+        </label>
         {selectedCount === rows.length && rows.length > 0 && (
           <Badge variant="outline" className="text-primary">
             <Check className="mr-1 h-3 w-3" /> Full
