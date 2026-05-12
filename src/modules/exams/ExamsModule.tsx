@@ -21,6 +21,7 @@ interface Exam {
   name: string;
   exam_type: string;
   workflow_status: "draft" | "submitted" | "locked";
+  created_at?: string | null;
 }
 
 interface ExamSubject {
@@ -52,11 +53,20 @@ const listFrom = <T,>(payload: any): T[] =>
   [];
 
 const today = () => new Date().toISOString().slice(0, 10);
+type ExamTab = "exams" | "subjects" | "marks";
+
+const newestFirst = <T extends { id: string; created_at?: string | null; exam_date?: string | null }>(items: T[]) =>
+  [...items].sort((a, b) => {
+    const left = b.created_at || b.exam_date || b.id;
+    const right = a.created_at || a.exam_date || a.id;
+    return String(left).localeCompare(String(right));
+  });
 
 export function ExamsModule() {
   const { user } = useAuth();
   const institutionId = user?.institution_id || "";
   const isTeacher = user?.role === "teacher";
+  const canUseBulkImports = !isTeacher && ["superadmin", "admin", "principal"].includes(user?.role || "");
   const [loading, setLoading] = useState(false);
   const [exams, setExams] = useState<Exam[]>([]);
   const [examSubjects, setExamSubjects] = useState<ExamSubject[]>([]);
@@ -68,6 +78,7 @@ export function ExamsModule() {
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedExamId, setSelectedExamId] = useState("");
   const [selectedExamSubjectId, setSelectedExamSubjectId] = useState("");
+  const [activeTab, setActiveTab] = useState<ExamTab>("exams");
   const [marks, setMarks] = useState<Record<string, { marks: string; absent: boolean }>>({});
 
   const [examForm, setExamForm] = useState({ academic_year_id: "", name: "", exam_type: "midterm" });
@@ -127,7 +138,7 @@ export function ExamsModule() {
         api.get<any>("/students?page=1&page_size=500"),
         isTeacher ? api.get<any>("/teachers/self/teaching-scope") : Promise.resolve(null),
       ]);
-      const nextExams = listFrom<Exam>(examsRes);
+      const nextExams = newestFirst(listFrom<Exam>(examsRes));
       const nextYears = listFrom<AcademicYear>(yearsRes);
       setExams(nextExams);
       setYears(nextYears);
@@ -186,7 +197,7 @@ export function ExamsModule() {
   const loadExamSubjects = async (examId: string) => {
     if (!examId) return;
     const res = await api.get<any>(`/exams/${examId}/subjects`);
-    const rows = listFrom<ExamSubject>(res);
+    const rows = newestFirst(listFrom<ExamSubject>(res));
     setExamSubjects(rows);
     setSelectedExamSubjectId((current) => current || rows[0]?.id || "");
   };
@@ -217,12 +228,22 @@ export function ExamsModule() {
       .catch(() => setMarks({}));
   }, [selectedExamSubjectId, filteredStudents.length]);
 
+  useEffect(() => {
+    const nextTab: ExamTab = exams.length === 0 ? "exams" : visibleExamSubjects.length === 0 ? "subjects" : "marks";
+    setActiveTab((current) => {
+      if (current === "marks" && visibleExamSubjects.length === 0) return nextTab;
+      if (current === "subjects" && exams.length === 0) return "exams";
+      return current || nextTab;
+    });
+  }, [exams.length, visibleExamSubjects.length]);
+
   const createExam = async () => {
     if (!examForm.academic_year_id || !examForm.name.trim()) return toast.error("Enter exam name and academic year");
     await api.post("/exams", { institution_id: institutionId, ...examForm, name: examForm.name.trim() });
     toast.success("Exam created");
     setExamForm((prev) => ({ ...prev, name: "" }));
     await load();
+    setActiveTab("subjects");
   };
 
   const addSubject = async () => {
@@ -236,6 +257,7 @@ export function ExamsModule() {
     toast.success("Subject added to exam");
     setSubjectForm((prev) => ({ ...prev, subject_id: "" }));
     await loadExamSubjects(selectedExam.id);
+    setActiveTab("marks");
   };
 
   const workflow = async (action: "submit" | "lock") => {
@@ -263,9 +285,13 @@ export function ExamsModule() {
         description="Create exams, map subjects, upload marks and lock results."
         actions={
           <>
-            <BulkImportTools resource="exams" label="Exams" onImported={load} />
-            <BulkImportTools resource="exam-subjects" label="Exam Subjects" onImported={load} />
-            <BulkImportTools resource="marks" label="Marks" onImported={load} />
+            {canUseBulkImports && (
+              <>
+                <BulkImportTools resource="exams" label="Exams" onImported={load} />
+                <BulkImportTools resource="exam-subjects" label="Exam Subjects" onImported={load} />
+                <BulkImportTools resource="marks" label="Marks" onImported={load} />
+              </>
+            )}
             <Button variant="outline" onClick={load} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" /> Refresh</Button>
           </>
         }
@@ -277,11 +303,11 @@ export function ExamsModule() {
         <StatCard label="Locked Exams" value={exams.filter((e) => e.workflow_status === "locked").length} icon={Lock} accent="amber" />
       </div>
 
-      <Tabs defaultValue="marks">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ExamTab)}>
         <TabsList className="mb-4 flex h-auto flex-wrap justify-start">
-          <TabsTrigger value="marks">Marks Upload</TabsTrigger>
-          <TabsTrigger value="subjects">Exam Subjects</TabsTrigger>
           <TabsTrigger value="exams">Exams</TabsTrigger>
+          <TabsTrigger value="subjects" disabled={exams.length === 0}>Exam Subjects</TabsTrigger>
+          <TabsTrigger value="marks" disabled={visibleExamSubjects.length === 0}>Marks Upload</TabsTrigger>
         </TabsList>
 
         <TabsContent value="marks">

@@ -6,18 +6,12 @@ import { DataTable, type Column } from "@/components/common/DataTable";
 import { FormModal } from "@/components/common/FormModal";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { BulkImportTools } from "@/components/common/BulkImportTools";
+import { SearchableSelect } from "@/components/common/SearchableSelect";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Plus, Pencil, Trash2, Link2, CalendarClock, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import type { ListParams, Paginated } from "@/types";
@@ -746,17 +740,7 @@ export function TeachersPage() {
       >
         <div className="space-y-4">
           <FieldLabel label="Teacher User">
-            <Select value={teacherForm.user_id} onValueChange={(value) => setTeacherForm((prev) => ({ ...prev, user_id: value }))}>
-              <SelectTrigger><SelectValue placeholder="Select teacher user" /></SelectTrigger>
-              <SelectContent>
-                {candidates.map((item) => (
-                  <SelectItem key={item.user_id} value={item.user_id}>
-                    {item.full_name} · {item.email}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FieldLabel>
+            <SearchableSelect value={teacherForm.user_id} onValueChange={(value) => setTeacherForm((prev) => ({ ...prev, user_id: value }))} placeholder="Select teacher user" searchPlaceholder="Search teacher user..." options={candidates.map((item) => ({ value: item.user_id, label: `${item.full_name} - ${item.email}` }))} /></FieldLabel>
           <FieldLabel label="Employee Code">
             <Input value={teacherForm.employee_code} onChange={(e) => setTeacherForm((prev) => ({ ...prev, employee_code: e.target.value }))} />
           </FieldLabel>
@@ -789,29 +773,11 @@ export function TeachersPage() {
             </div>
           )}
           <FieldLabel label="Course">
-            <Select value={classForm.course_id} onValueChange={(value) => setClassForm((prev) => ({ ...prev, course_id: value }))}>
-              <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
-              <SelectContent>
-                {courses.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </FieldLabel>
+            <SearchableSelect value={classForm.course_id} onValueChange={(value) => setClassForm((prev) => ({ ...prev, course_id: value }))} placeholder="Select course" searchPlaceholder="Search course..." options={courses.map((item) => ({ value: item.id, label: item.name }))} /></FieldLabel>
           <FieldLabel label="Branch">
-            <Select value={classForm.branch_id} onValueChange={(value) => setClassForm((prev) => ({ ...prev, branch_id: value }))} disabled={!classForm.course_id}>
-              <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
-              <SelectContent>
-                {branches.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </FieldLabel>
+            <SearchableSelect value={classForm.branch_id} onValueChange={(value) => setClassForm((prev) => ({ ...prev, branch_id: value }))} disabled={!classForm.course_id} placeholder="Select branch" searchPlaceholder="Search branch..." options={branches.map((item) => ({ value: item.id, label: item.name }))} /></FieldLabel>
           <FieldLabel label="Class">
-            <Select value={classForm.class_id} onValueChange={(value) => setClassForm((prev) => ({ ...prev, class_id: value }))} disabled={!classForm.branch_id}>
-              <SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger>
-              <SelectContent>
-                {classes.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </FieldLabel>
+            <SearchableSelect value={classForm.class_id} onValueChange={(value) => setClassForm((prev) => ({ ...prev, class_id: value }))} disabled={!classForm.branch_id} placeholder="Select class" searchPlaceholder="Search class..." options={classes.map((item) => ({ value: item.id, label: item.name }))} /></FieldLabel>
         </div>
       </FormModal>
 
@@ -826,48 +792,15 @@ export function TeachersPage() {
       >
         <div className="grid gap-4 sm:grid-cols-2">
           <FieldLabel label="Academic Year">
-            <Select value={timetableForm.academic_year_id} onValueChange={(value) => setTimetableForm((prev) => ({ ...prev, academic_year_id: value }))}>
-              <SelectTrigger><SelectValue placeholder="Select academic year" /></SelectTrigger>
-              <SelectContent>
-                {years.map((item) => <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </FieldLabel>
+            <SearchableSelect value={timetableForm.academic_year_id} onValueChange={(value) => setTimetableForm((prev) => ({ ...prev, academic_year_id: value }))} placeholder="Select academic year" searchPlaceholder="Search academic year..." options={years.map((item) => ({ value: item.id, label: item.label }))} /></FieldLabel>
           <FieldLabel label="Class">
-            <Select value={timetableForm.class_id} onValueChange={(value) => setTimetableForm((prev) => ({ ...prev, class_id: value }))}>
-              <SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger>
-              <SelectContent>
-                {(selectedTeacher?.assigned_classes || []).map((item) => (
-                  <SelectItem key={item.class_id} value={item.class_id}>
-                    {item.class_name} · {item.branch_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FieldLabel>
+            <SearchableSelect value={timetableForm.class_id} onValueChange={(value) => setTimetableForm((prev) => ({ ...prev, class_id: value }))} placeholder="Select class" searchPlaceholder="Search class..." options={(selectedTeacher?.assigned_classes || []).map((item) => ({ value: item.class_id, label: `${item.class_name} - ${item.branch_name}` }))} /></FieldLabel>
           <FieldLabel label="Section">
-            <Select value={timetableForm.section_id} onValueChange={(value) => setTimetableForm((prev) => ({ ...prev, section_id: value }))} disabled={!timetableForm.class_id}>
-              <SelectTrigger><SelectValue placeholder="Select section" /></SelectTrigger>
-              <SelectContent>
-                {sections.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </FieldLabel>
+            <SearchableSelect value={timetableForm.section_id} onValueChange={(value) => setTimetableForm((prev) => ({ ...prev, section_id: value }))} disabled={!timetableForm.class_id} placeholder="Select section" searchPlaceholder="Search section..." options={sections.map((item) => ({ value: item.id, label: item.name }))} /></FieldLabel>
           <FieldLabel label="Subject">
-            <Select value={timetableForm.subject_id} onValueChange={(value) => setTimetableForm((prev) => ({ ...prev, subject_id: value }))} disabled={!timetableForm.class_id}>
-              <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
-              <SelectContent>
-                {subjects.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </FieldLabel>
+            <SearchableSelect value={timetableForm.subject_id} onValueChange={(value) => setTimetableForm((prev) => ({ ...prev, subject_id: value }))} disabled={!timetableForm.class_id} placeholder="Select subject" searchPlaceholder="Search subject..." options={subjects.map((item) => ({ value: item.id, label: item.name }))} /></FieldLabel>
           <FieldLabel label="Day">
-            <Select value={timetableForm.day_of_week} onValueChange={(value) => setTimetableForm((prev) => ({ ...prev, day_of_week: value }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {dayOptions.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <SearchableSelect value={timetableForm.day_of_week} onValueChange={(value) => setTimetableForm((prev) => ({ ...prev, day_of_week: value }))} placeholder="Select day" searchPlaceholder="Search day..." options={dayOptions.map((item) => ({ value: item.value, label: item.label }))} />
           </FieldLabel>
           <FieldLabel label="Room">
             <Input value={timetableForm.room_no} onChange={(e) => setTimetableForm((prev) => ({ ...prev, room_no: e.target.value }))} />

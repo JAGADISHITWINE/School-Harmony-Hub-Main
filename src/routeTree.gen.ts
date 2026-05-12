@@ -16,7 +16,9 @@ import { Route as AppUsersRouteImport } from './routes/_app.users'
 import { Route as AppTimetableRouteImport } from './routes/_app.timetable'
 import { Route as AppTeachersRouteImport } from './routes/_app.teachers'
 import { Route as AppTeacherLinkingRouteImport } from './routes/_app.teacher-linking'
+import { Route as AppTeacherContentRouteImport } from './routes/_app.teacher-content'
 import { Route as AppStudentsRouteImport } from './routes/_app.students'
+import { Route as AppStudentCompleteReportRouteImport } from './routes/_app.student-complete-report'
 import { Route as AppStaffRouteImport } from './routes/_app.staff'
 import { Route as AppRolesRouteImport } from './routes/_app.roles'
 import { Route as AppReportsRouteImport } from './routes/_app.reports'
@@ -30,10 +32,12 @@ import { Route as AppFeesRouteImport } from './routes/_app.fees'
 import { Route as AppExamsRouteImport } from './routes/_app.exams'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppClassesRouteImport } from './routes/_app.classes'
+import { Route as AppClassMentorsRouteImport } from './routes/_app.class-mentors'
 import { Route as AppAttendanceRouteImport } from './routes/_app.attendance'
 import { Route as AppStudentsIndexRouteImport } from './routes/_app.students.index'
 import { Route as AppStudentsStatusRouteImport } from './routes/_app.students.status'
 import { Route as AppStudentsRegistryRouteImport } from './routes/_app.students.registry'
+import { Route as AppStudentsPromotionsRouteImport } from './routes/_app.students.promotions'
 import { Route as AppStudentsGuardiansRouteImport } from './routes/_app.students.guardians'
 import { Route as AppStudentsDocumentsRouteImport } from './routes/_app.students.documents'
 import { Route as AppStudentsAdmissionsRouteImport } from './routes/_app.students.admissions'
@@ -85,11 +89,22 @@ const AppTeacherLinkingRoute = AppTeacherLinkingRouteImport.update({
   path: '/teacher-linking',
   getParentRoute: () => AppRoute,
 } as any)
+const AppTeacherContentRoute = AppTeacherContentRouteImport.update({
+  id: '/teacher-content',
+  path: '/teacher-content',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppStudentsRoute = AppStudentsRouteImport.update({
   id: '/students',
   path: '/students',
   getParentRoute: () => AppRoute,
 } as any)
+const AppStudentCompleteReportRoute =
+  AppStudentCompleteReportRouteImport.update({
+    id: '/student-complete-report',
+    path: '/student-complete-report',
+    getParentRoute: () => AppRoute,
+  } as any)
 const AppStaffRoute = AppStaffRouteImport.update({
   id: '/staff',
   path: '/staff',
@@ -155,6 +170,11 @@ const AppClassesRoute = AppClassesRouteImport.update({
   path: '/classes',
   getParentRoute: () => AppRoute,
 } as any)
+const AppClassMentorsRoute = AppClassMentorsRouteImport.update({
+  id: '/class-mentors',
+  path: '/class-mentors',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAttendanceRoute = AppAttendanceRouteImport.update({
   id: '/attendance',
   path: '/attendance',
@@ -173,6 +193,11 @@ const AppStudentsStatusRoute = AppStudentsStatusRouteImport.update({
 const AppStudentsRegistryRoute = AppStudentsRegistryRouteImport.update({
   id: '/registry',
   path: '/registry',
+  getParentRoute: () => AppStudentsRoute,
+} as any)
+const AppStudentsPromotionsRoute = AppStudentsPromotionsRouteImport.update({
+  id: '/promotions',
+  path: '/promotions',
   getParentRoute: () => AppStudentsRoute,
 } as any)
 const AppStudentsGuardiansRoute = AppStudentsGuardiansRouteImport.update({
@@ -261,6 +286,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/attendance': typeof AppAttendanceRoute
+  '/class-mentors': typeof AppClassMentorsRoute
   '/classes': typeof AppClassesRoute
   '/dashboard': typeof AppDashboardRoute
   '/exams': typeof AppExamsRoute
@@ -274,7 +300,9 @@ export interface FileRoutesByFullPath {
   '/reports': typeof AppReportsRoute
   '/roles': typeof AppRolesRoute
   '/staff': typeof AppStaffRoute
+  '/student-complete-report': typeof AppStudentCompleteReportRoute
   '/students': typeof AppStudentsRouteWithChildren
+  '/teacher-content': typeof AppTeacherContentRoute
   '/teacher-linking': typeof AppTeacherLinkingRoute
   '/teachers': typeof AppTeachersRoute
   '/timetable': typeof AppTimetableRoute
@@ -295,6 +323,7 @@ export interface FileRoutesByFullPath {
   '/students/admissions': typeof AppStudentsAdmissionsRoute
   '/students/documents': typeof AppStudentsDocumentsRoute
   '/students/guardians': typeof AppStudentsGuardiansRoute
+  '/students/promotions': typeof AppStudentsPromotionsRoute
   '/students/registry': typeof AppStudentsRegistryRoute
   '/students/status': typeof AppStudentsStatusRoute
   '/students/': typeof AppStudentsIndexRoute
@@ -303,6 +332,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/attendance': typeof AppAttendanceRoute
+  '/class-mentors': typeof AppClassMentorsRoute
   '/classes': typeof AppClassesRoute
   '/dashboard': typeof AppDashboardRoute
   '/exams': typeof AppExamsRoute
@@ -316,6 +346,8 @@ export interface FileRoutesByTo {
   '/reports': typeof AppReportsRoute
   '/roles': typeof AppRolesRoute
   '/staff': typeof AppStaffRoute
+  '/student-complete-report': typeof AppStudentCompleteReportRoute
+  '/teacher-content': typeof AppTeacherContentRoute
   '/teacher-linking': typeof AppTeacherLinkingRoute
   '/teachers': typeof AppTeachersRoute
   '/timetable': typeof AppTimetableRoute
@@ -336,6 +368,7 @@ export interface FileRoutesByTo {
   '/students/admissions': typeof AppStudentsAdmissionsRoute
   '/students/documents': typeof AppStudentsDocumentsRoute
   '/students/guardians': typeof AppStudentsGuardiansRoute
+  '/students/promotions': typeof AppStudentsPromotionsRoute
   '/students/registry': typeof AppStudentsRegistryRoute
   '/students/status': typeof AppStudentsStatusRoute
   '/students': typeof AppStudentsIndexRoute
@@ -346,6 +379,7 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
   '/_app/attendance': typeof AppAttendanceRoute
+  '/_app/class-mentors': typeof AppClassMentorsRoute
   '/_app/classes': typeof AppClassesRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/exams': typeof AppExamsRoute
@@ -359,7 +393,9 @@ export interface FileRoutesById {
   '/_app/reports': typeof AppReportsRoute
   '/_app/roles': typeof AppRolesRoute
   '/_app/staff': typeof AppStaffRoute
+  '/_app/student-complete-report': typeof AppStudentCompleteReportRoute
   '/_app/students': typeof AppStudentsRouteWithChildren
+  '/_app/teacher-content': typeof AppTeacherContentRoute
   '/_app/teacher-linking': typeof AppTeacherLinkingRoute
   '/_app/teachers': typeof AppTeachersRoute
   '/_app/timetable': typeof AppTimetableRoute
@@ -380,6 +416,7 @@ export interface FileRoutesById {
   '/_app/students/admissions': typeof AppStudentsAdmissionsRoute
   '/_app/students/documents': typeof AppStudentsDocumentsRoute
   '/_app/students/guardians': typeof AppStudentsGuardiansRoute
+  '/_app/students/promotions': typeof AppStudentsPromotionsRoute
   '/_app/students/registry': typeof AppStudentsRegistryRoute
   '/_app/students/status': typeof AppStudentsStatusRoute
   '/_app/students/': typeof AppStudentsIndexRoute
@@ -390,6 +427,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/attendance'
+    | '/class-mentors'
     | '/classes'
     | '/dashboard'
     | '/exams'
@@ -403,7 +441,9 @@ export interface FileRouteTypes {
     | '/reports'
     | '/roles'
     | '/staff'
+    | '/student-complete-report'
     | '/students'
+    | '/teacher-content'
     | '/teacher-linking'
     | '/teachers'
     | '/timetable'
@@ -424,6 +464,7 @@ export interface FileRouteTypes {
     | '/students/admissions'
     | '/students/documents'
     | '/students/guardians'
+    | '/students/promotions'
     | '/students/registry'
     | '/students/status'
     | '/students/'
@@ -432,6 +473,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/attendance'
+    | '/class-mentors'
     | '/classes'
     | '/dashboard'
     | '/exams'
@@ -445,6 +487,8 @@ export interface FileRouteTypes {
     | '/reports'
     | '/roles'
     | '/staff'
+    | '/student-complete-report'
+    | '/teacher-content'
     | '/teacher-linking'
     | '/teachers'
     | '/timetable'
@@ -465,6 +509,7 @@ export interface FileRouteTypes {
     | '/students/admissions'
     | '/students/documents'
     | '/students/guardians'
+    | '/students/promotions'
     | '/students/registry'
     | '/students/status'
     | '/students'
@@ -474,6 +519,7 @@ export interface FileRouteTypes {
     | '/_app'
     | '/login'
     | '/_app/attendance'
+    | '/_app/class-mentors'
     | '/_app/classes'
     | '/_app/dashboard'
     | '/_app/exams'
@@ -487,7 +533,9 @@ export interface FileRouteTypes {
     | '/_app/reports'
     | '/_app/roles'
     | '/_app/staff'
+    | '/_app/student-complete-report'
     | '/_app/students'
+    | '/_app/teacher-content'
     | '/_app/teacher-linking'
     | '/_app/teachers'
     | '/_app/timetable'
@@ -508,6 +556,7 @@ export interface FileRouteTypes {
     | '/_app/students/admissions'
     | '/_app/students/documents'
     | '/_app/students/guardians'
+    | '/_app/students/promotions'
     | '/_app/students/registry'
     | '/_app/students/status'
     | '/_app/students/'
@@ -570,11 +619,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTeacherLinkingRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/teacher-content': {
+      id: '/_app/teacher-content'
+      path: '/teacher-content'
+      fullPath: '/teacher-content'
+      preLoaderRoute: typeof AppTeacherContentRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/students': {
       id: '/_app/students'
       path: '/students'
       fullPath: '/students'
       preLoaderRoute: typeof AppStudentsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/student-complete-report': {
+      id: '/_app/student-complete-report'
+      path: '/student-complete-report'
+      fullPath: '/student-complete-report'
+      preLoaderRoute: typeof AppStudentCompleteReportRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/staff': {
@@ -668,6 +731,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppClassesRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/class-mentors': {
+      id: '/_app/class-mentors'
+      path: '/class-mentors'
+      fullPath: '/class-mentors'
+      preLoaderRoute: typeof AppClassMentorsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/attendance': {
       id: '/_app/attendance'
       path: '/attendance'
@@ -694,6 +764,13 @@ declare module '@tanstack/react-router' {
       path: '/registry'
       fullPath: '/students/registry'
       preLoaderRoute: typeof AppStudentsRegistryRouteImport
+      parentRoute: typeof AppStudentsRoute
+    }
+    '/_app/students/promotions': {
+      id: '/_app/students/promotions'
+      path: '/promotions'
+      fullPath: '/students/promotions'
+      preLoaderRoute: typeof AppStudentsPromotionsRouteImport
       parentRoute: typeof AppStudentsRoute
     }
     '/_app/students/guardians': {
@@ -829,6 +906,7 @@ interface AppStudentsRouteChildren {
   AppStudentsAdmissionsRoute: typeof AppStudentsAdmissionsRoute
   AppStudentsDocumentsRoute: typeof AppStudentsDocumentsRoute
   AppStudentsGuardiansRoute: typeof AppStudentsGuardiansRoute
+  AppStudentsPromotionsRoute: typeof AppStudentsPromotionsRoute
   AppStudentsRegistryRoute: typeof AppStudentsRegistryRoute
   AppStudentsStatusRoute: typeof AppStudentsStatusRoute
   AppStudentsIndexRoute: typeof AppStudentsIndexRoute
@@ -839,6 +917,7 @@ const AppStudentsRouteChildren: AppStudentsRouteChildren = {
   AppStudentsAdmissionsRoute: AppStudentsAdmissionsRoute,
   AppStudentsDocumentsRoute: AppStudentsDocumentsRoute,
   AppStudentsGuardiansRoute: AppStudentsGuardiansRoute,
+  AppStudentsPromotionsRoute: AppStudentsPromotionsRoute,
   AppStudentsRegistryRoute: AppStudentsRegistryRoute,
   AppStudentsStatusRoute: AppStudentsStatusRoute,
   AppStudentsIndexRoute: AppStudentsIndexRoute,
@@ -850,6 +929,7 @@ const AppStudentsRouteWithChildren = AppStudentsRoute._addFileChildren(
 
 interface AppRouteChildren {
   AppAttendanceRoute: typeof AppAttendanceRoute
+  AppClassMentorsRoute: typeof AppClassMentorsRoute
   AppClassesRoute: typeof AppClassesRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppExamsRoute: typeof AppExamsRoute
@@ -863,7 +943,9 @@ interface AppRouteChildren {
   AppReportsRoute: typeof AppReportsRoute
   AppRolesRoute: typeof AppRolesRoute
   AppStaffRoute: typeof AppStaffRoute
+  AppStudentCompleteReportRoute: typeof AppStudentCompleteReportRoute
   AppStudentsRoute: typeof AppStudentsRouteWithChildren
+  AppTeacherContentRoute: typeof AppTeacherContentRoute
   AppTeacherLinkingRoute: typeof AppTeacherLinkingRoute
   AppTeachersRoute: typeof AppTeachersRoute
   AppTimetableRoute: typeof AppTimetableRoute
@@ -882,6 +964,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppAttendanceRoute: AppAttendanceRoute,
+  AppClassMentorsRoute: AppClassMentorsRoute,
   AppClassesRoute: AppClassesRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppExamsRoute: AppExamsRoute,
@@ -895,7 +978,9 @@ const AppRouteChildren: AppRouteChildren = {
   AppReportsRoute: AppReportsRoute,
   AppRolesRoute: AppRolesRoute,
   AppStaffRoute: AppStaffRoute,
+  AppStudentCompleteReportRoute: AppStudentCompleteReportRoute,
   AppStudentsRoute: AppStudentsRouteWithChildren,
+  AppTeacherContentRoute: AppTeacherContentRoute,
   AppTeacherLinkingRoute: AppTeacherLinkingRoute,
   AppTeachersRoute: AppTeachersRoute,
   AppTimetableRoute: AppTimetableRoute,

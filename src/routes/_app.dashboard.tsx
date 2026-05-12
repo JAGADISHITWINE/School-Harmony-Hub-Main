@@ -39,7 +39,7 @@ const DASHBOARD_PAGE_SIZE = 100;
 
 function Dashboard() {
   const { user } = useAuth();
-  const role = user?.role || "admin";
+  const role = user?.role;
 
   const [usersCount, setUsersCount] = useState(0);
   const [institutionsCount, setInstitutionsCount] = useState(0);
@@ -54,6 +54,8 @@ function Dashboard() {
   const [teacherProfile, setTeacherProfile] = useState<any>(null);
 
   useEffect(() => {
+    if (!user || !role) return;
+    let active = true;
     (async () => {
       try {
         if (role === "super_admin" || role === "admin" || role === "principal") {
@@ -63,12 +65,14 @@ function Dashboard() {
             api.get<any>(`/students?page=1&page_size=${DASHBOARD_PAGE_SIZE}`),
             api.get<any>(`/teachers?page=1&page_size=${DASHBOARD_PAGE_SIZE}`),
           ]);
+          if (!active) return;
           if (orgRes.status === "fulfilled") {
             const orgs = listFrom<any>(orgRes.value);
             setOrganizationsCount(totalFrom(orgRes.value));
             const institutionCalls = await Promise.allSettled(
               orgs.map((org) => api.get<any>(`/institutions?org_id=${org.id}&page=1&page_size=${DASHBOARD_PAGE_SIZE}`))
             );
+            if (!active) return;
             setInstitutionsCount(
               institutionCalls.reduce((acc, res) => (
                 res.status === "fulfilled" ? acc + totalFrom(res.value) : acc
@@ -82,6 +86,7 @@ function Dashboard() {
 
         if (role === "accountant" || role === "admin" || role === "super_admin" || role === "principal") {
           const fRes = await api.get<any>(`/fees/student-fees?page=1&page_size=${DASHBOARD_PAGE_SIZE}`);
+          if (!active) return;
           const fees = listFrom<any>(fRes);
           const total = fees.reduce((sum, row) => sum + Number(row.amount_due || row.amount || 0), 0);
           const paid = fees.reduce((sum, row) => sum + Number(row.amount_paid || 0), 0);
@@ -94,6 +99,7 @@ function Dashboard() {
             api.get<any>("/teachers/self/dashboard"),
             api.get<any>(`/attendance/my-context?target_date=${new Date().toISOString().slice(0, 10)}`),
           ]);
+          if (!active) return;
           if (dashboardRes.status === "fulfilled") {
             const data = dashboardRes.value?.data || {};
             setTeacherProfile(data.teacher || null);
@@ -109,7 +115,8 @@ function Dashboard() {
         // keep dashboard resilient for partial API availability
       }
     })();
-  }, [role]);
+    return () => { active = false; };
+  }, [role, user]);
 
   const teacherPendingAttendance = useMemo(
     () => teacherAttendanceSlots.filter((slot) => String(slot.session_status || "").toLowerCase() !== "closed").length,
@@ -158,6 +165,10 @@ function Dashboard() {
         </Card>
       </div>
     );
+  }
+
+  if (!user || !role) {
+    return null;
   }
 
   if (role === "accountant") {

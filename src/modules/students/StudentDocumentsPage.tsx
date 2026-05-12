@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FileArchive, FileCheck2, Plus, UploadCloud } from "lucide-react";
+import { Download, FileArchive, FileCheck2, Plus, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/common/PageHeader";
 import { BulkImportTools } from "@/components/common/BulkImportTools";
@@ -60,6 +60,7 @@ export function StudentDocumentsPage() {
   const [editing, setEditing] = useState<DocumentRow | null>(null);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const rows = list.data.data;
 
   useEffect(() => {
@@ -71,6 +72,7 @@ export function StudentDocumentsPage() {
   const startCreate = () => {
     setEditing(null);
     setForm(emptyForm);
+    setSelectedFile(null);
     setOpen(true);
   };
 
@@ -85,6 +87,7 @@ export function StudentDocumentsPage() {
       status: row.status || "pending",
       remarks: row.remarks || "",
     });
+    setSelectedFile(null);
     setOpen(true);
   };
 
@@ -92,16 +95,28 @@ export function StudentDocumentsPage() {
     if (!form.student_id || !form.title.trim()) return toast.error("Select student and enter document title");
     setBusy(true);
     try {
-      const payload = {
-        ...form,
-        file_name: form.file_name || null,
-        file_url: form.file_url || null,
-        remarks: form.remarks || null,
-      };
-      if (editing) await api.patch(`/students/documents/${editing.id}`, payload);
-      else await api.post("/students/documents", payload);
+      if (!editing && selectedFile) {
+        const body = new FormData();
+        body.append("student_id", form.student_id);
+        body.append("document_type", form.document_type);
+        body.append("title", form.title);
+        body.append("status", form.status);
+        if (form.remarks) body.append("remarks", form.remarks);
+        body.append("file", selectedFile);
+        await api.upload("/students/documents/upload", body);
+      } else {
+        const payload = {
+          ...form,
+          file_name: form.file_name || null,
+          file_url: form.file_url || null,
+          remarks: form.remarks || null,
+        };
+        if (editing) await api.patch(`/students/documents/${editing.id}`, payload);
+        else await api.post("/students/documents", payload);
+      }
       toast.success(editing ? "Document updated" : "Document added");
       setOpen(false);
+      setSelectedFile(null);
       list.refresh();
     } finally {
       setBusy(false);
@@ -153,7 +168,17 @@ export function StudentDocumentsPage() {
         params={list.params as ListParams}
         onParamsChange={list.setParams}
         searchPlaceholder="Search documents..."
-        rowActions={(row) => <Button size="sm" variant="outline" onClick={() => startEdit(row)}>Edit</Button>}
+        rowActions={(row) => (
+          <div className="inline-flex gap-1">
+            {row.file_url && (
+              <Button size="sm" variant="ghost" onClick={() => api.download(`/students/documents/${row.id}/download`, row.file_name || `${row.title}.pdf`)}>
+                <Download className="mr-1 h-4 w-4" />
+                Download
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={() => startEdit(row)}>Edit</Button>
+          </div>
+        )}
       />
 
       <FormModal
@@ -200,6 +225,15 @@ export function StudentDocumentsPage() {
             </Field>
           </FieldGrid>
           <Field label="Title"><Input value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} /></Field>
+          {!editing && (
+            <Field label="Upload File">
+              <Input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.webp"
+                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+              />
+            </Field>
+          )}
           <FieldGrid>
             <Field label="File Name"><Input value={form.file_name} onChange={(e) => setForm((prev) => ({ ...prev, file_name: e.target.value }))} /></Field>
             <Field label="File URL"><Input value={form.file_url} onChange={(e) => setForm((prev) => ({ ...prev, file_url: e.target.value }))} /></Field>

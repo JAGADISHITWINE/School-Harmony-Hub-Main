@@ -2,8 +2,18 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
+function normalizeTextInput(value: string) {
+  return value.replace(/^\s+/, "").replace(/[ \t]{2,}/g, " ");
+}
+
 const Textarea = React.forwardRef<HTMLTextAreaElement, React.ComponentProps<"textarea">>(
-  ({ className, ...props }, ref) => {
+  ({ className, onChange, ...props }, ref) => {
+    const handleChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const nextValue = normalizeTextInput(event.target.value);
+      if (nextValue !== event.target.value) event.target.value = nextValue;
+      onChange?.(event);
+    };
+
     return (
       <textarea
         className={cn(
@@ -11,6 +21,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, React.ComponentProps<"tex
           className,
         )}
         ref={ref}
+        onChange={handleChange}
         {...props}
       />
     );

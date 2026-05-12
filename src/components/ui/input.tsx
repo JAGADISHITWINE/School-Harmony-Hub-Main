@@ -2,8 +2,37 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
+const nonTextTypes = new Set([
+  "checkbox",
+  "color",
+  "date",
+  "datetime-local",
+  "file",
+  "hidden",
+  "month",
+  "number",
+  "radio",
+  "range",
+  "time",
+  "week",
+]);
+
+function normalizeTextInput(value: string) {
+  return value.replace(/^\s+/, "").replace(/[ \t]{2,}/g, " ");
+}
+
 const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-  ({ className, type, ...props }, ref) => {
+  ({ className, type, onChange, ...props }, ref) => {
+    const shouldNormalize = !nonTextTypes.has(type || "text");
+
+    const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+      if (shouldNormalize) {
+        const nextValue = normalizeTextInput(event.target.value);
+        if (nextValue !== event.target.value) event.target.value = nextValue;
+      }
+      onChange?.(event);
+    };
+
     return (
       <input
         type={type}
@@ -12,6 +41,7 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
           className,
         )}
         ref={ref}
+        onChange={handleChange}
         {...props}
       />
     );

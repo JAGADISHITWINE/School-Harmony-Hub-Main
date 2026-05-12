@@ -103,6 +103,9 @@ async function refreshAccessToken() {
 
 async function backendRequestOnce<T>(method: Method, safeUrl: string, body: any, allowRefresh: boolean): Promise<T> {
   const token = tokenStore.get();
+  if (!token && !safeUrl.startsWith("/auth/")) {
+    throw new Error("Not authenticated");
+  }
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
 
@@ -174,9 +177,34 @@ export const api = {
   put: <T,>(url: string, body?: any) => request<T>("PUT", url, body),
   patch: <T,>(url: string, body?: any) => request<T>("PATCH", url, body),
   delete: <T,>(url: string) => request<T>("DELETE", url),
-  upload: async <T,>(url: string, formData: FormData): Promise<T> => {
+  upload: async <T,>(url: string, formData: FormData, onProgress?: (percent: number) => void): Promise<T> => {
     if (!API_BASE_URL) throw new Error("Bulk upload requires backend API");
     const token = tokenStore.get();
+    if (onProgress) {
+      return new Promise<T>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", endpoint(url));
+        if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 75));
+        };
+        xhr.onload = () => {
+          let data: any = null;
+          try { data = xhr.responseText ? JSON.parse(xhr.responseText) : null; } catch { data = null; }
+          if (xhr.status < 200 || xhr.status >= 300 || data?.success === false) {
+            const msg = data?.message || `Upload failed (${xhr.status})`;
+            toast.error(msg);
+            reject(new Error(msg));
+            return;
+          }
+          onProgress(100);
+          resolve(data as T);
+        };
+        xhr.onerror = () => reject(new Error("Upload failed"));
+        onProgress(0);
+        xhr.send(formData);
+      });
+    }
     const res = await fetch(endpoint(url), {
       method: "POST",
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,

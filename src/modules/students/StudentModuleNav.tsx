@@ -6,6 +6,7 @@ const studentTabs = [
   { label: "Registry", to: "/students/registry" },
   { label: "Admissions", to: "/students/admissions" },
   { label: "Academic Records", to: "/students/academic-records" },
+  { label: "Promotions", to: "/students/promotions" },
   { label: "Guardians", to: "/students/guardians" },
   { label: "Documents", to: "/students/documents" },
   { label: "Status", to: "/students/status" },

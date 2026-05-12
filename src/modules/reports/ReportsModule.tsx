@@ -14,6 +14,8 @@ import {
   Library,
   RefreshCw,
   Download,
+  FileText,
+  ReceiptText,
   School,
   ShieldCheck,
   UserCheck,
@@ -27,6 +29,7 @@ import { StatCard } from "@/components/common/StatCard";
 import { Field } from "@/components/common/FormFields";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -35,6 +38,16 @@ interface Course { id: string; name: string; }
 interface Branch { id: string; name: string; }
 interface ClassRow { id: string; name: string; }
 interface Section { id: string; name: string; }
+interface ReportStudent {
+  student_id: string;
+  roll_number: string;
+  full_name: string;
+  email: string;
+  academic_year: string;
+  branch: string;
+  class_name: string;
+  section: string;
+}
 
 interface AttendanceReportRow {
   student_id: string;
@@ -115,6 +128,10 @@ export function ReportsModule() {
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
   const [filters, setFilters] = useState({ academic_year_id: "", course_id: "", branch_id: "", class_id: "", section_id: "" });
+  const [studentSearch, setStudentSearch] = useState("");
+  const [students, setStudents] = useState<ReportStudent[]>([]);
+  const [selectedStudent, setSelectedStudent] = useState<ReportStudent | null>(null);
+  const [paymentId, setPaymentId] = useState("");
   const [overview, setOverview] = useState<Overview | null>(null);
   const [attendance, setAttendance] = useState<AttendanceReportRow[]>([]);
   const [workload, setWorkload] = useState<WorkloadRow[]>([]);
@@ -192,6 +209,40 @@ export function ReportsModule() {
     setHodAnalytics(res?.data || res);
   };
 
+  const queryString = (extra: Record<string, string> = {}) => {
+    const params = new URLSearchParams();
+    Object.entries({ ...filters, ...extra }).forEach(([key, value]) => {
+      if (value) params.set(key, value);
+    });
+    return params.toString();
+  };
+
+  const searchReportStudents = async () => {
+    const qs = queryString({ search: studentSearch });
+    const res = await api.get<any>(`/reports/students/search?${qs}`);
+    const rows = listFrom<ReportStudent>(res);
+    setStudents(rows);
+    setSelectedStudent(rows[0] || null);
+  };
+
+  const downloadStudentReport = (kind: "report-card" | "attendance-certificate") => {
+    if (!selectedStudent) return toast.error("Select a student first");
+    const qs = filters.academic_year_id ? `?academic_year_id=${filters.academic_year_id}` : "";
+    const filename = `${selectedStudent.roll_number}_${kind}.pdf`;
+    api.download(`/reports/students/${selectedStudent.student_id}/${kind}.pdf${qs}`, filename);
+  };
+
+  const downloadBranchReport = (format: "csv" | "pdf") => {
+    const qs = queryString();
+    const url = format === "csv" ? `/reports/branch-report/export.csv?${qs}` : `/reports/branch-report.pdf?${qs}`;
+    api.download(url, `branch_report.${format}`);
+  };
+
+  const downloadFeeReceipt = () => {
+    if (!paymentId.trim()) return toast.error("Enter payment receipt/payment ID");
+    api.download(`/reports/fees/payments/${paymentId.trim()}/receipt.pdf`, "fee_receipt.pdf");
+  };
+
   const refreshAll = async () => {
     await Promise.all([
       filters.academic_year_id ? loadOverview() : Promise.resolve(),
@@ -253,6 +304,7 @@ export function ReportsModule() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="academics">Academics</TabsTrigger>
           <TabsTrigger value="students">Students</TabsTrigger>
+          <TabsTrigger value="printables">Printables</TabsTrigger>
           <TabsTrigger value="attendance">Attendance</TabsTrigger>
           <TabsTrigger value="fees">Fees</TabsTrigger>
           <TabsTrigger value="exams">Exams</TabsTrigger>
@@ -305,6 +357,67 @@ export function ReportsModule() {
             ["Missing Phone", o?.students.guardian_phone_missing, Bell],
             ["Missing Email", o?.students.guardian_email_missing, Bell],
           ]} />
+        </TabsContent>
+
+        <TabsContent value="printables">
+          <div className="grid gap-4 xl:grid-cols-2">
+            <Panel
+              title="Student Search"
+              action={<Button size="sm" onClick={searchReportStudents}>Search</Button>}
+            >
+              <div className="mb-4 grid gap-3 md:grid-cols-[1fr_auto]">
+                <Input
+                  value={studentSearch}
+                  onChange={(e) => setStudentSearch(e.target.value)}
+                  placeholder="Search by student name, roll number, or email"
+                  onKeyDown={(e) => { if (e.key === "Enter") searchReportStudents(); }}
+                />
+                <Button variant="outline" onClick={searchReportStudents}>Apply Filters</Button>
+              </div>
+              <SimpleTable
+                headers={["Roll", "Student", "Branch", "Class", "Section"]}
+                rows={students.map((student) => [
+                  <button className="font-medium text-primary" onClick={() => setSelectedStudent(student)}>{student.roll_number}</button>,
+                  student.full_name,
+                  student.branch,
+                  student.class_name,
+                  student.section,
+                ])}
+                empty="Search students using filters above."
+              />
+            </Panel>
+
+            <Panel title="Printable Student Reports">
+              <div className="space-y-3">
+                <div className="rounded-md border border-border p-3 text-sm">
+                  <div className="font-medium">{selectedStudent ? `${selectedStudent.full_name} (${selectedStudent.roll_number})` : "No student selected"}</div>
+                  <div className="text-muted-foreground">{selectedStudent ? `${selectedStudent.branch} - ${selectedStudent.class_name} / ${selectedStudent.section}` : "Select a student from search results."}</div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => downloadStudentReport("report-card")} disabled={!selectedStudent}>
+                    <FileText className="mr-2 h-4 w-4" /> Report Card PDF
+                  </Button>
+                  <Button variant="outline" onClick={() => downloadStudentReport("attendance-certificate")} disabled={!selectedStudent}>
+                    <FileCheck2 className="mr-2 h-4 w-4" /> Attendance Certificate
+                  </Button>
+                </div>
+              </div>
+            </Panel>
+
+            <Panel title="Fee Receipt">
+              <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                <Input value={paymentId} onChange={(e) => setPaymentId(e.target.value)} placeholder="Paste payment ID / receipt ID" />
+                <Button onClick={downloadFeeReceipt}><ReceiptText className="mr-2 h-4 w-4" /> Receipt PDF</Button>
+              </div>
+            </Panel>
+
+            <Panel title="Branch / HOD Downloads">
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => downloadBranchReport("csv")}><Download className="mr-2 h-4 w-4" /> Branch CSV</Button>
+                <Button onClick={() => downloadBranchReport("pdf")}><FileText className="mr-2 h-4 w-4" /> Branch PDF</Button>
+              </div>
+            </Panel>
+          </div>
         </TabsContent>
 
         <TabsContent value="attendance">

@@ -1,16 +1,28 @@
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
+import { BulkImportTools } from "@/components/common/BulkImportTools";
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Pencil, Trash2 } from "lucide-react";
+import { SearchableSelect } from "@/components/common/SearchableSelect";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { Check, ChevronsUpDown, Pencil, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/services";
 import { useAuth } from "@/store/auth";
 
-type Option = { id: string; name: string };
+type Option = { id: string; name: string; class_id?: string };
+type YearOption = { id: string; label: string };
 type TeacherOption = { id: string; full_name: string; employee_code: string };
 type HODLinkOption = {
   id: string;
@@ -22,7 +34,7 @@ type HODLinkOption = {
   branch_id: string;
   branch_name: string;
 };
-type SubjectOption = { id: string; name: string; branch_id: string };
+type SubjectOption = { id: string; name: string; code: string; branch_id: string; class_id: string };
 type TeacherHodSubjectRow = {
   id: string;
   teacher_id: string;
@@ -35,6 +47,10 @@ type TeacherHodSubjectRow = {
   course_name: string;
   branch_id: string;
   branch_name: string;
+  class_id?: string | null;
+  class_name?: string | null;
+  section_id?: string | null;
+  section_name?: string | null;
   subject_id: string;
   subject_name: string;
 };
@@ -49,120 +65,159 @@ export function TeacherLinkingPage() {
   const { user } = useAuth();
   const institutionId = user?.institution_id || "";
 
+  const [years, setYears] = useState<YearOption[]>([]);
   const [teachers, setTeachers] = useState<TeacherOption[]>([]);
   const [courses, setCourses] = useState<Option[]>([]);
   const [branches, setBranches] = useState<Option[]>([]);
-  const [hodLinks, setHodLinks] = useState<HODLinkOption[]>([]);
+  const [classes, setClasses] = useState<Option[]>([]);
+  const [sections, setSections] = useState<Option[]>([]);
   const [subjects, setSubjects] = useState<SubjectOption[]>([]);
+  const [hodLinks, setHodLinks] = useState<HODLinkOption[]>([]);
   const [rows, setRows] = useState<TeacherHodSubjectRow[]>([]);
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const [academicYearId, setAcademicYearId] = useState("");
   const [teacherId, setTeacherId] = useState("");
   const [courseId, setCourseId] = useState("");
-  const [branchIds, setBranchIds] = useState<string[]>([]);
-  const [hodLinkIds, setHodLinkIds] = useState<string[]>([]);
+  const [branchId, setBranchId] = useState("");
+  const [classIds, setClassIds] = useState<string[]>([]);
+  const [sectionIds, setSectionIds] = useState<string[]>([]);
   const [subjectIds, setSubjectIds] = useState<string[]>([]);
 
-  const selectedHodLinks = useMemo(() => hodLinks.filter((x) => hodLinkIds.includes(x.id)), [hodLinkIds, hodLinks]);
-  const selectedBranchSet = useMemo(() => new Set(branchIds), [branchIds]);
   const selectedTeacher = useMemo(() => teachers.find((t) => t.id === teacherId) || null, [teachers, teacherId]);
-  const groupedRows = useMemo(() => {
-    const map = new Map<string, TeacherHodSubjectRow[]>();
-    for (const row of rows) {
-      const key = `${row.teacher_id}|${row.hod_teacher_id}`;
-      map.set(key, [...(map.get(key) || []), row]);
-    }
-    return Array.from(map.values()).map((items) =>
-      items.slice().sort((a, b) => a.subject_name.localeCompare(b.subject_name))
-    );
-  }, [rows]);
+  const selectedHodLink = useMemo(() => hodLinks.find((h) => h.branch_id === branchId && h.course_id === courseId) || null, [hodLinks, branchId, courseId]);
+  const validLinkCount = useMemo(() => {
+    return sectionIds.reduce((count, nextSectionId) => {
+      const section = sections.find((item) => item.id === nextSectionId);
+      if (!section?.class_id) return count;
+      return count + subjectIds.filter((id) => subjects.find((subject) => subject.id === id)?.class_id === section.class_id).length;
+    }, 0);
+  }, [sectionIds, sections, subjectIds, subjects]);
 
-  const loadTeachers = async () => {
-    const res = await api.get<any>("/teachers?page=1&page_size=500");
-    const items = listFrom<any>(res).map((x) => ({ id: x.id, full_name: x.full_name, employee_code: x.employee_code }));
-    setTeachers(items);
-  };
-
-  const loadCourses = async () => {
+  const loadBase = async () => {
     if (!institutionId) return;
-    const res = await api.get<any>(`/courses?institution_id=${institutionId}&page=1&page_size=500`);
-    setCourses(listFrom<any>(res).map((x) => ({ id: x.id, name: x.name })));
+    const [yearRes, teacherRes, courseRes] = await Promise.all([
+      api.get<any>(`/academic-years?institution_id=${institutionId}&page=1&page_size=500`),
+      api.get<any>("/teachers?page=1&page_size=500"),
+      api.get<any>(`/courses?institution_id=${institutionId}&page=1&page_size=500`),
+    ]);
+    const nextYears = listFrom<any>(yearRes).map((x) => ({ id: x.id, label: x.label || x.name }));
+    setYears(nextYears);
+    setAcademicYearId((prev) => prev || nextYears[0]?.id || "");
+    setTeachers(listFrom<any>(teacherRes).map((x) => ({ id: x.id, full_name: x.full_name, employee_code: x.employee_code })));
+    setCourses(listFrom<any>(courseRes).map((x) => ({ id: x.id, name: x.name })));
   };
 
-  const loadBranches = async (selectedCourseId: string) => {
-    if (!selectedCourseId) {
-      setBranches([]);
-      return;
-    }
-    const res = await api.get<any>(`/branches?course_id=${selectedCourseId}&page=1&page_size=500`);
+  const loadBranches = async () => {
+    if (!courseId) return setBranches([]);
+    const res = await api.get<any>(`/branches?course_id=${courseId}&page=1&page_size=500`);
     setBranches(listFrom<any>(res).map((x) => ({ id: x.id, name: x.name })));
+  };
+
+  const loadClasses = async () => {
+    if (!branchId) return setClasses([]);
+    const params = new URLSearchParams({ branch_id: branchId, page: "1", page_size: "500" });
+    if (academicYearId) params.set("academic_year_id", academicYearId);
+    const res = await api.get<any>(`/classes?${params.toString()}`);
+    setClasses(listFrom<any>(res).map((x) => ({ id: x.id, name: x.name })));
+  };
+
+  const loadSections = async () => {
+    if (classIds.length === 0) return setSections([]);
+    const responses = await Promise.all(
+      classIds.map((nextClassId) => api.get<any>(`/sections?class_id=${nextClassId}&page=1&page_size=500`))
+    );
+    setSections(
+      responses.flatMap((res, index) =>
+        listFrom<any>(res).map((x) => ({ id: x.id, name: x.name, class_id: x.class_id || classIds[index] }))
+      )
+    );
+  };
+
+  const loadSubjects = async () => {
+    if (!branchId || classIds.length === 0) return setSubjects([]);
+    const responses = await Promise.all(
+      classIds.map((nextClassId) => {
+        const params = new URLSearchParams({ branch_id: branchId, class_id: nextClassId, page: "1", page_size: "500" });
+        if (academicYearId) params.set("academic_year_id", academicYearId);
+        return api.get<any>(`/subjects?${params.toString()}`);
+      })
+    );
+    setSubjects(
+      responses.flatMap((res, index) =>
+        listFrom<any>(res).map((x) => ({
+          id: x.id,
+          name: x.name,
+          code: x.code,
+          branch_id: x.branch_id,
+          class_id: x.class_id || classIds[index],
+        }))
+      )
+    );
   };
 
   const loadHodLinks = async () => {
     if (!institutionId) return;
     const params = new URLSearchParams({ institution_id: institutionId });
     if (courseId) params.set("course_id", courseId);
+    if (branchId) params.set("branch_id", branchId);
     const res = await api.get<any>(`/teachers/links/hod?${params.toString()}`);
-    const all = listFrom<HODLinkOption>(res);
-    setHodLinks(all.filter((x) => selectedBranchSet.size === 0 || selectedBranchSet.has(x.branch_id)));
-  };
-
-  const loadSubjects = async () => {
-    if (branchIds.length === 0) {
-      setSubjects([]);
-      return;
-    }
-    const byId = new Map<string, SubjectOption>();
-    for (const bid of branchIds) {
-      const res = await api.get<any>(`/subjects?branch_id=${bid}&page=1&page_size=500`);
-      const items = listFrom<any>(res).map((x) => ({ id: x.id, name: x.name, branch_id: bid }));
-      for (const item of items) byId.set(item.id, item);
-    }
-    setSubjects(Array.from(byId.values()));
+    setHodLinks(listFrom<HODLinkOption>(res));
   };
 
   const loadRows = async () => {
     if (!institutionId) return;
     const params = new URLSearchParams({ institution_id: institutionId });
     if (courseId) params.set("course_id", courseId);
+    if (branchId) params.set("branch_id", branchId);
     const res = await api.get<any>(`/teachers/links/teacher-hod-subjects?${params.toString()}`);
-    const all = listFrom<TeacherHodSubjectRow>(res);
-    setRows(all.filter((x) => selectedBranchSet.size === 0 || selectedBranchSet.has(x.branch_id)));
+    setRows(listFrom<TeacherHodSubjectRow>(res));
   };
 
-  useEffect(() => {
-    loadTeachers().catch(() => toast.error("Failed to load teachers"));
-    loadCourses().catch(() => toast.error("Failed to load courses"));
-  }, [institutionId]);
-
+  useEffect(() => { loadBase().catch(() => toast.error("Failed to load setup data")); }, [institutionId]);
   useEffect(() => {
     if (!editingLinkId) {
-      setBranchIds([]);
-      setHodLinkIds([]);
-      setSubjectIds([]);
+      setBranchId(""); setClassIds([]); setSectionIds([]); setSubjectIds([]);
     }
-    loadBranches(courseId).catch(() => toast.error("Failed to load branches"));
-  }, [courseId]);
-
-  useEffect(() => {
-    if (!editingLinkId) {
-      setHodLinkIds([]);
-      setSubjectIds([]);
-    }
+    loadBranches().catch(() => toast.error("Failed to load branches"));
     loadHodLinks().catch(() => toast.error("Failed to load HOD links"));
+    loadRows().catch(() => toast.error("Failed to load links"));
+  }, [courseId]);
+  useEffect(() => {
+    if (!editingLinkId) {
+      setClassIds([]); setSectionIds([]); setSubjectIds([]);
+    }
+    loadClasses().catch(() => toast.error("Failed to load classes"));
+    loadHodLinks().catch(() => toast.error("Failed to load HOD links"));
+    loadRows().catch(() => toast.error("Failed to load links"));
+  }, [branchId, academicYearId]);
+  useEffect(() => {
+    if (!editingLinkId) {
+      setSectionIds([]); setSubjectIds([]);
+    }
+    loadSections().catch(() => toast.error("Failed to load sections"));
     loadSubjects().catch(() => toast.error("Failed to load subjects"));
-    loadRows().catch(() => toast.error("Failed to load teacher links"));
-  }, [institutionId, courseId, branchIds.join(",")]);
+  }, [classIds.join("|")]);
 
-  const toggleSubject = (id: string, checked: boolean) => {
-    setSubjectIds((prev) => (checked ? [...prev, id] : prev.filter((x) => x !== id)));
+  const resetForm = () => {
+    setEditingLinkId(null);
+    setTeacherId("");
+    setCourseId("");
+    setBranchId("");
+    setClassIds([]);
+    setSectionIds([]);
+    setSubjectIds([]);
   };
 
-  const createLink = async () => {
+  const saveLink = async () => {
     if (saving) return;
-    if (!teacherId || hodLinkIds.length === 0 || subjectIds.length === 0) {
-      toast.error("Select teacher, HOD link(s) and at least one subject");
+    if (!teacherId || !selectedHodLink || classIds.length === 0 || sectionIds.length === 0 || subjectIds.length === 0) {
+      toast.error("Select teacher, branch, class, section and subject");
+      return;
+    }
+    if (!editingLinkId && validLinkCount === 0) {
+      toast.error("Select matching sections and subjects for the selected classes");
       return;
     }
     setSaving(true);
@@ -170,55 +225,40 @@ export function TeacherLinkingPage() {
       if (editingLinkId) {
         await api.patch(`/teachers/links/teacher-hod-subjects/${editingLinkId}`, {
           teacher_id: teacherId,
-          hod_link_id: hodLinkIds[0],
+          hod_link_id: selectedHodLink.id,
+          section_id: sectionIds[0],
           subject_id: subjectIds[0],
         });
         toast.success("Teacher link updated");
-        setEditingLinkId(null);
-        setTeacherId("");
-        setCourseId("");
-        setBranchIds([]);
-        setHodLinkIds([]);
-        setSubjectIds([]);
-        setHodLinks([]);
-        setSubjects([]);
-        await loadRows();
-        return;
+      } else {
+        let createdCount = 0;
+        let skippedCount = 0;
+        for (const nextSectionId of sectionIds) {
+          const section = sections.find((item) => item.id === nextSectionId);
+          const matchingSubjectIds = subjectIds.filter((id) => subjects.find((subject) => subject.id === id)?.class_id === section?.class_id);
+          if (matchingSubjectIds.length === 0) continue;
+          const response = await api.post<any>("/teachers/links/teacher-hod-subjects", {
+            teacher_id: teacherId,
+            hod_link_id: selectedHodLink.id,
+            section_id: nextSectionId,
+            subject_ids: matchingSubjectIds,
+          });
+          createdCount += Number(response?.data?.created_count || 0);
+          skippedCount += Number(response?.data?.skipped_count || 0);
+        }
+        if (createdCount > 0 && skippedCount > 0) {
+          toast.success(`${createdCount} teacher links created. ${skippedCount} duplicate links skipped.`);
+        } else if (createdCount > 0) {
+          toast.success(`${createdCount} teacher links created`);
+        } else {
+          toast.info("All selected teacher links already exist");
+        }
       }
-      for (const linkId of hodLinkIds) {
-        const link = hodLinks.find((x) => x.id === linkId);
-        if (!link) continue;
-        const perBranchSubjects = subjectIds.filter((sid) => {
-          const subject = subjects.find((s) => s.id === sid);
-          return subject?.branch_id === link.branch_id;
-        });
-        if (perBranchSubjects.length === 0) continue;
-        await api.post("/teachers/links/teacher-hod-subjects", {
-          teacher_id: teacherId,
-          hod_link_id: linkId,
-          subject_ids: perBranchSubjects,
-        });
-      }
-      toast.success("Teacher linked with HOD subjects");
-      setTeacherId("");
-      setCourseId("");
-      setBranchIds([]);
-      setHodLinkIds([]);
-      setSubjectIds([]);
-      setHodLinks([]);
-      setSubjects([]);
+      resetForm();
       await loadRows();
     } finally {
       setSaving(false);
     }
-  };
-
-  const toggleBranch = (id: string, checked: boolean) => {
-    setBranchIds((prev) => (checked ? [...prev, id] : prev.filter((x) => x !== id)));
-  };
-
-  const toggleHod = (id: string, checked: boolean) => {
-    setHodLinkIds((prev) => (checked ? [...prev, id] : prev.filter((x) => x !== id)));
   };
 
   const removeLink = async (id: string) => {
@@ -231,148 +271,217 @@ export function TeacherLinkingPage() {
     setEditingLinkId(row.id);
     setTeacherId(row.teacher_id);
     setCourseId(row.course_id);
-    setBranchIds([row.branch_id]);
-    setHodLinkIds([row.hod_link_id]);
+    setBranchId(row.branch_id);
+    setClassIds(row.class_id ? [row.class_id] : []);
+    setSectionIds(row.section_id ? [row.section_id] : []);
     setSubjectIds([row.subject_id]);
-  };
-
-  const cancelEdit = () => {
-    setEditingLinkId(null);
-    setTeacherId("");
-    setCourseId("");
-    setBranchIds([]);
-    setHodLinkIds([]);
-    setSubjectIds([]);
   };
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Teacher Linking" description="Link teacher with institute, course, branch, HOD and multiple subjects." />
+      <PageHeader title="Teacher Linking" description="Link teachers to academic year, class, section and subject." />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 space-y-4">
-          <Card className="p-4 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label>Teacher</Label>
-                <Select value={teacherId} onValueChange={setTeacherId}>
-                  <SelectTrigger><SelectValue placeholder="Select teacher" /></SelectTrigger>
-                  <SelectContent>{teachers.map((t) => <SelectItem key={t.id} value={t.id}>{t.full_name} ({t.employee_code})</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Course</Label>
-                <Select value={courseId} onValueChange={setCourseId}>
-                  <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
-                  <SelectContent>{courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
+        <Card className="lg:col-span-2 p-4 space-y-4">
+          <div className="flex flex-col gap-2 border-b pb-4">
+            <p className="text-sm font-semibold">Bulk Upload Teacher Links</p>
+            <BulkImportTools resource="teacher-links" label="Teacher Links" onImported={loadRows} />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <SelectField label="Academic Year" value={academicYearId} onValueChange={setAcademicYearId} items={years.map((y) => ({ id: y.id, name: y.label }))} placeholder="Select year" />
+            <SelectField label="Teacher" value={teacherId} onValueChange={setTeacherId} items={teachers.map((t) => ({ id: t.id, name: `${t.full_name} (${t.employee_code})` }))} placeholder="Select teacher" />
+            <SelectField label="Course" value={courseId} onValueChange={setCourseId} items={courses} placeholder="Select course" />
+            <SelectField label="Branch" value={branchId} onValueChange={setBranchId} items={branches} placeholder="Select branch" />
+            <MultiSelectField
+              label="Classes / Semesters"
+              values={classIds}
+              onValuesChange={setClassIds}
+              items={classes}
+              placeholder="Select classes"
+              single={Boolean(editingLinkId)}
+            />
+            <MultiSelectField
+              label="Sections"
+              values={sectionIds}
+              onValuesChange={setSectionIds}
+              items={sections}
+              placeholder="Select sections"
+              single={Boolean(editingLinkId)}
+            />
+            <MultiSelectField
+              label="Subjects"
+              values={subjectIds}
+              onValuesChange={setSubjectIds}
+              items={subjects.map((s) => ({ id: s.id, name: `${s.name} (${s.code})` }))}
+              placeholder="Select subjects"
+              single={Boolean(editingLinkId)}
+            />
+          </div>
+        </Card>
+
+        <Card className="p-4 space-y-3">
+          <p className="text-sm font-semibold">Selection Summary</p>
+          <div className="text-sm"><span className="text-muted-foreground">Teacher:</span> {selectedTeacher ? `${selectedTeacher.full_name} (${selectedTeacher.employee_code})` : "-"}</div>
+          <div className="text-sm"><span className="text-muted-foreground">HOD Link:</span> {selectedHodLink ? selectedHodLink.hod_teacher_name : "Not mapped"}</div>
+          <div className="text-sm"><span className="text-muted-foreground">Classes:</span> {classIds.length || "-"}</div>
+          <div className="text-sm"><span className="text-muted-foreground">Sections:</span> {sectionIds.length || "-"}</div>
+          <div className="text-sm"><span className="text-muted-foreground">Subjects:</span> {subjectIds.length || "-"}</div>
+          {!editingLinkId && (
+            <div className="rounded-md bg-muted p-3 text-xs text-muted-foreground">
+              This will create {validLinkCount} valid link{validLinkCount === 1 ? "" : "s"}.
             </div>
-            <div>
-              <Label>Branches</Label>
-              <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
-                {branches.map((b) => (
-                  <label key={b.id} className="flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-muted/40 transition-colors">
-                    <Checkbox checked={branchIds.includes(b.id)} onCheckedChange={(v) => toggleBranch(b.id, Boolean(v))} />
-                    <span className="text-sm">{b.name}</span>
-                  </label>
-                ))}
-                {branches.length === 0 && <p className="text-sm text-muted-foreground">Select course to load branches.</p>}
-              </div>
-            </div>
-            <div>
-              <Label>HODs</Label>
-              <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
-                {hodLinks.map((h) => (
-                  <label key={h.id} className="flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-muted/40 transition-colors">
-                    <Checkbox checked={hodLinkIds.includes(h.id)} onCheckedChange={(v) => toggleHod(h.id, Boolean(v))} />
-                    <span className="text-sm">{h.hod_teacher_name} <span className="text-muted-foreground">({h.branch_name})</span></span>
-                  </label>
-                ))}
-                {hodLinks.length === 0 && <p className="text-sm text-muted-foreground">No HOD links for selected branch(es).</p>}
-              </div>
-            </div>
-            <div>
-              <Label>Subjects</Label>
-              <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
-                {subjects.map((s) => (
-                  <label key={s.id} className="flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-muted/40 transition-colors">
-                    <Checkbox checked={subjectIds.includes(s.id)} onCheckedChange={(v) => toggleSubject(s.id, Boolean(v))} />
-                    <span className="text-sm">{s.name}</span>
-                  </label>
-                ))}
-                {subjects.length === 0 && <p className="text-sm text-muted-foreground">No subjects for selected branch(es).</p>}
-              </div>
-            </div>
-          </Card>
-        </div>
-        <div className="space-y-4">
-          <Card className="p-4 space-y-3">
-            <p className="text-sm font-semibold">Selection Summary</p>
-            <div className="text-sm"><span className="text-muted-foreground">Teacher:</span> {selectedTeacher ? `${selectedTeacher.full_name} (${selectedTeacher.employee_code})` : "-"}</div>
-            <div className="text-sm"><span className="text-muted-foreground">Branches:</span> {branchIds.length}</div>
-            <div className="text-sm"><span className="text-muted-foreground">HOD Links:</span> {hodLinkIds.length}</div>
-            <div className="text-sm"><span className="text-muted-foreground">Subjects:</span> {subjectIds.length}</div>
-            <Button className="w-full mt-2" disabled={saving} onClick={() => createLink().catch(() => toast.error("Failed to create teacher link"))}>
-              {saving ? "Saving..." : editingLinkId ? "Update Link" : "Link Teacher"}
-            </Button>
-            {editingLinkId && (
-              <Button variant="outline" className="w-full" onClick={cancelEdit}>
-                Cancel Edit
-              </Button>
-            )}
-          </Card>
-        </div>
+          )}
+          <Button className="w-full" disabled={saving} onClick={() => saveLink().catch((e: any) => toast.error(e?.message || "Failed to save teacher link"))}>
+            {saving ? "Saving..." : editingLinkId ? "Update Link" : "Link Selected"}
+          </Button>
+          {editingLinkId && <Button variant="outline" className="w-full" onClick={resetForm}>Cancel Edit</Button>}
+        </Card>
       </div>
 
       <Card className="p-4">
         <p className="mb-3 text-sm font-semibold">Linked Records</p>
         <div className="overflow-auto">
-          <table className="w-full min-w-[760px] border-collapse">
+          <table className="w-full min-w-[920px] border-collapse">
             <thead>
               <tr>
                 <th className="border p-2 text-left text-xs uppercase">Teacher</th>
                 <th className="border p-2 text-left text-xs uppercase">HOD</th>
                 <th className="border p-2 text-left text-xs uppercase">Course / Branch</th>
+                <th className="border p-2 text-left text-xs uppercase">Class / Section</th>
                 <th className="border p-2 text-left text-xs uppercase">Subject</th>
                 <th className="border p-2 text-left text-xs uppercase">Edit</th>
                 <th className="border p-2 text-left text-xs uppercase">Action</th>
               </tr>
             </thead>
             <tbody>
-              {groupedRows.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="border p-3 text-sm text-muted-foreground">No teacher links found.</td>
+              {rows.length === 0 && (
+                <tr><td colSpan={7} className="border p-3 text-sm text-muted-foreground">No teacher links found.</td></tr>
+              )}
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td className="border p-2 text-sm">{r.teacher_name}</td>
+                  <td className="border p-2 text-sm">{r.hod_teacher_name}</td>
+                  <td className="border p-2 text-sm">{r.course_name} / {r.branch_name}</td>
+                  <td className="border p-2 text-sm">{r.class_name || "-"} / {r.section_name || "-"}</td>
+                  <td className="border p-2 text-sm">{r.subject_name}</td>
+                  <td className="border p-2"><Button variant="ghost" size="icon" onClick={() => startEdit(r)}><Pencil className="h-4 w-4" /></Button></td>
+                  <td className="border p-2"><Button variant="ghost" size="icon" className="text-destructive" onClick={() => removeLink(r.id).catch(() => toast.error("Failed to remove link"))}><Trash2 className="h-4 w-4" /></Button></td>
                 </tr>
-              )}
-              {groupedRows.map((group) =>
-                group.map((r, idx) => (
-                  <tr key={r.id}>
-                    {idx === 0 && (
-                      <>
-                        <td className="border p-2 text-sm font-medium align-top" rowSpan={group.length}>{r.teacher_name}</td>
-                        <td className="border p-2 text-sm font-medium align-top" rowSpan={group.length}>{r.hod_teacher_name}</td>
-                      </>
-                    )}
-                    <td className="border p-2 text-sm">{r.course_name} / {r.branch_name}</td>
-                    <td className="border p-2 text-sm">{r.subject_name}</td>
-                    <td className="border p-2">
-                      <Button variant="ghost" size="icon" onClick={() => startEdit(r)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    </td>
-                    <td className="border p-2">
-                      <Button variant="ghost" size="icon" className="text-destructive" onClick={() => removeLink(r.id).catch(() => toast.error("Failed to remove link"))}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))
-              )}
+              ))}
             </tbody>
           </table>
         </div>
       </Card>
+    </div>
+  );
+}
+
+function SelectField({ label, value, onValueChange, items, placeholder }: {
+  label: string;
+  value: string;
+  onValueChange: (value: string) => void;
+  items: Option[];
+  placeholder: string;
+}) {
+  return (
+    <div>
+      <Label>{label}</Label>
+      <SearchableSelect
+        value={value}
+        onValueChange={onValueChange}
+        placeholder={placeholder}
+        searchPlaceholder={`Search ${label.toLowerCase()}...`}
+        options={items.map((item) => ({ value: item.id, label: item.name }))}
+      />
+    </div>
+  );
+}
+
+function MultiSelectField({
+  label,
+  values,
+  onValuesChange,
+  items,
+  placeholder,
+  single = false,
+}: {
+  label: string;
+  values: string[];
+  onValuesChange: (values: string[]) => void;
+  items: Option[];
+  placeholder: string;
+  single?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedItems = items.filter((item) => values.includes(item.id));
+  const selectedText =
+    selectedItems.length === 0
+      ? placeholder
+      : single
+        ? selectedItems[0]?.name
+        : `${selectedItems.length} selected`;
+
+  const toggle = (id: string) => {
+    if (single) {
+      onValuesChange([id]);
+      setOpen(false);
+      return;
+    }
+    onValuesChange(values.includes(id) ? values.filter((value) => value !== id) : [...values, id]);
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <Label>{label}</Label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button type="button" variant="outline" role="combobox" className="h-9 w-full justify-between px-3 font-normal">
+            <span className={cn("truncate", selectedItems.length === 0 && "text-muted-foreground")}>{selectedText}</span>
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+          <Command>
+            <CommandInput placeholder={`Search ${label.toLowerCase()}...`} />
+            <CommandList>
+              <CommandEmpty>No options found.</CommandEmpty>
+              {!single && items.length > 0 && (
+                <div className="flex gap-2 border-b p-2">
+                  <Button type="button" size="sm" variant="outline" className="h-8 flex-1" onClick={() => onValuesChange(items.map((item) => item.id))}>
+                    Select All
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" className="h-8 flex-1" onClick={() => onValuesChange([])}>
+                    Clear
+                  </Button>
+                </div>
+              )}
+              <CommandGroup>
+                {items.map((item) => {
+                  const checked = values.includes(item.id);
+                  return (
+                    <CommandItem key={item.id} value={item.name} onSelect={() => toggle(item.id)}>
+                      <Check className={cn("mr-2 h-4 w-4", checked ? "opacity-100" : "opacity-0")} />
+                      <span className="truncate">{item.name}</span>
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      {selectedItems.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {selectedItems.map((item) => (
+            <Badge key={item.id} variant="secondary" className="gap-1">
+              {item.name}
+              <button type="button" onClick={() => onValuesChange(values.filter((value) => value !== item.id))}>
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

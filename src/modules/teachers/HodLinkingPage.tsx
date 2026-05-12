@@ -3,7 +3,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/common/SearchableSelect";
 import { Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/services";
@@ -161,24 +161,15 @@ export function HodLinkingPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <Label>HOD Teacher</Label>
-                <Select value={hodUserId} onValueChange={setHodUserId}>
-                  <SelectTrigger><SelectValue placeholder="Select HOD" /></SelectTrigger>
-                  <SelectContent>{teachers.map((t) => <SelectItem key={t.user_id} value={t.user_id}>{t.full_name} ({t.employee_code})</SelectItem>)}</SelectContent>
-                </Select>
+                <SearchableSelect value={hodUserId} onValueChange={setHodUserId} placeholder="Select HOD" searchPlaceholder="Search HOD..." options={teachers.map((t) => ({ value: t.user_id, label: `${t.full_name} (${t.employee_code})` }))} />
               </div>
               <div>
                 <Label>Course</Label>
-                <Select value={courseId} onValueChange={setCourseId}>
-                  <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
-                  <SelectContent>{courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                </Select>
+                <SearchableSelect value={courseId} onValueChange={setCourseId} placeholder="Select course" searchPlaceholder="Search course..." options={courses.map((c) => ({ value: c.id, label: c.name }))} />
               </div>
               <div>
                 <Label>Branch</Label>
-                <Select value={branchId} onValueChange={setBranchId}>
-                  <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
-                  <SelectContent>{branches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
-                </Select>
+                <SearchableSelect value={branchId} onValueChange={setBranchId} placeholder="Select branch" searchPlaceholder="Search branch..." options={branches.map((b) => ({ value: b.id, label: b.name }))} />
               </div>
             </div>
           </Card>
